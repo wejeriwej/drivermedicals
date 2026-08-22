@@ -1126,16 +1126,20 @@ app.post("/api/voicezak", async (req, res) => {
 //stripe CARD PAYMENTS////////////////////////////////////
 
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null;
 const motorMedicalsStripe = process.env.MOTOR_MEDICALS_STRIPE_SECRET_KEY
   ? new Stripe(process.env.MOTOR_MEDICALS_STRIPE_SECRET_KEY)
   : null;
 
-admin.initializeApp({
-  credential: admin.credential.cert(
-    JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-  )
-});
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  admin.initializeApp({
+    credential: admin.credential.cert(
+      JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+    )
+  });
+}
 
 
 
