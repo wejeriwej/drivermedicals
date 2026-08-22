@@ -15,9 +15,7 @@ const timeFieldset = document.querySelector('#time-fieldset');
 const dateField = document.querySelector('#appointment-date');
 const timeField = document.querySelector('#appointment-time');
 const success = document.querySelector('#success');
-const API_BASE_URL = location.hostname.endsWith('.web.app') || location.hostname.endsWith('.firebaseapp.com')
-  ? 'https://motor-medicals-api.onrender.com'
-  : '';
+const API_BASE_URL = 'https://motor-medicals-api.onrender.com';
 const apiUrl = path => `${API_BASE_URL}${path}`;
 
 const menu = document.querySelector('.menu');
