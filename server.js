@@ -1126,10 +1126,10 @@ app.post("/api/voicezak", async (req, res) => {
 //stripe CARD PAYMENTS////////////////////////////////////
 
 
-const stripe = process.env.STRIPE_SECRET_KEY
+const stripe = process.env.STRIPE_SECRET_KEY?.startsWith("sk_")
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
   : null;
-const motorMedicalsStripe = process.env.MOTOR_MEDICALS_STRIPE_SECRET_KEY
+const motorMedicalsStripe = process.env.MOTOR_MEDICALS_STRIPE_SECRET_KEY?.startsWith("sk_")
   ? new Stripe(process.env.MOTOR_MEDICALS_STRIPE_SECRET_KEY)
   : null;
 
