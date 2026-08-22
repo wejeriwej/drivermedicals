@@ -86,7 +86,7 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
-const openai = new OpenAI();
+const openai = process.env.OPENAI_API_KEY ? new OpenAI() : null;
 
 function looksSuspiciousForEnglish(text = "") {
   const trimmed = text.trim();
@@ -103,6 +103,10 @@ function normalizeTranscriptText(text = "") {
 }
 
 app.post("/api/transcribe", upload.single("file"), async (req, res) => {
+  if (!openai) {
+    return res.status(503).json({ error: "Transcription is not configured." });
+  }
+
   try {
     console.log("📥 Incoming request to /api/transcribe");
 
