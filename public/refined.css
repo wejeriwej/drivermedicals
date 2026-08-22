@@ -1,0 +1,128 @@
+body { font-family: "Segoe UI", Arial, sans-serif; }
+
+.hero {
+  grid-template-columns: minmax(0, 1.05fr) minmax(380px, .95fr);
+  min-height: 570px;
+  padding-top: 74px;
+  padding-bottom: 74px;
+  background: linear-gradient(135deg, #f5faf7, #e5f1eb);
+}
+
+.hero h1 {
+  font-size: clamp(3rem, 5.6vw, 4.8rem);
+  letter-spacing: -3px;
+}
+
+.service-visual {
+  display: none;
+}
+
+.hero-visual {
+  display: block;
+  width: 100%;
+  height: 430px;
+  max-width: 550px;
+  overflow: visible;
+  border-radius: 26px;
+  isolation: isolate;
+}
+
+.hero-visual::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -16px 18px 18px -16px;
+  border-radius: 32px;
+  background: var(--lime);
+  transform: rotate(-2deg);
+}
+
+.taxi-hero-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 26px;
+  object-fit: cover;
+  object-position: center;
+  box-shadow: 0 28px 60px #123f3430;
+}
+
+.hero-visual .appointment-card {
+  right: -18px;
+  bottom: 24px;
+}
+
+.split {
+  grid-template-columns: minmax(0, 700px);
+  padding-top: 88px;
+  padding-bottom: 88px;
+}
+
+.split h2,
+.guide h2,
+.records h2 {
+  max-width: 680px;
+}
+
+.cards article {
+  min-height: 230px;
+}
+
+.booking form {
+  border-radius: 8px;
+}
+
+@media (max-width: 850px) {
+  .hero { grid-template-columns: 1fr; padding-top: 70px; padding-bottom: 70px; }
+  .hero-visual { width: min(100%, 620px); max-width: none; margin: 10px auto 0; }
+  .split { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 520px) {
+  .hero-visual { width: 100%; height: 320px; transform: none; }
+  .hero-visual::before { inset: -10px 10px 12px -10px; border-radius: 24px; }
+  .taxi-hero-image { border-radius: 20px; }
+  .hero-visual .appointment-card { right: 10px; bottom: -18px; }
+}
+
+.booking-success-page {
+  max-width: 850px;
+  margin: 0 auto;
+  padding: 80px 24px;
+}
+
+.booking-success-page h1 { font-size: clamp(2.6rem, 6vw, 4.5rem); letter-spacing: -2.5px; margin: 0 0 18px; }
+.booking-success-page > p { max-width: 650px; color: var(--muted); }
+.success-checklist, .success-records { margin: 36px 0; padding: 28px; border-radius: 10px; }
+.success-checklist { background: var(--pale); }
+.success-records { border: 1px solid var(--line); }
+.success-checklist h2, .success-records h2 { font-size: 1.65rem; letter-spacing: -1px; }
+.success-checklist ol, .success-records ol { display: grid; gap: 13px; padding: 0; list-style: none; }
+.success-checklist li { display: flex; gap: 13px; align-items: flex-start; }
+.success-checklist b { display: grid; flex: none; place-items: center; width: 27px; height: 27px; border-radius: 50%; background: var(--green); color: #fff; font-size: .78rem; }
+.success-records li { color: var(--muted); }
+
+.records-warning {
+  margin: 20px 0;
+  padding: 19px;
+  border: 1px solid #e7b96a;
+  border-left: 5px solid #d58618;
+  border-radius: 8px;
+  background: #fff8e9;
+  color: #533a16;
+}
+
+.records-warning > strong { display: block; margin-bottom: 8px; color: #6e4000; font-size: 1rem; }
+.records-warning p { margin: 8px 0; color: #654b28; font-size: .8rem; }
+.records-warning .records-template { display: inline-flex; margin-top: 7px; padding: 10px 13px; border-radius: 5px; background: #704600; color: #fff; font-size: .77rem; font-weight: 800; text-decoration: none; }
+.records-warning .records-help { margin-top: 12px; }
+.records-warning .records-help a { color: #704600; font-weight: 800; }
+
+.payment-choice { display: grid; gap: 9px; }
+.payment-choice label { display: flex; align-items: flex-start; gap: 11px; margin: 0; padding: 13px; border: 1px solid var(--line); border-radius: 7px; background: #fff; cursor: pointer; }
+.payment-choice label:has(input:checked) { border-color: var(--green); background: #eef9f4; box-shadow: 0 0 0 2px #08756514; }
+.payment-choice input { flex: none; width: auto; margin: 3px 0 0; accent-color: var(--green); }
+.payment-choice span, .payment-choice b, .payment-choice small { display: block; }
+.payment-choice b { color: var(--ink); font-size: .84rem; }
+.payment-choice small { margin-top: 2px; color: var(--muted); font-size: .73rem; font-weight: 500; }
+.payment-choice .voucher-note { margin: 4px 0 0; padding: 10px 12px; border-radius: 5px; background: #eaf5ef; color: var(--green); font-weight: 700; }

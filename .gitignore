@@ -1,0 +1,19 @@
+node_modules
+public/node_modules
+.env
+serviceAccountKey.json
+uploads/
+
+# Legacy Med School Sims content, not used by the Motor Medicals site
+public/videos/
+public/OTHERCASES/
+public/linktogpt/
+public/searchtopics/
+public/webpages/
+public/page1.html
+public/script.js
+
+# Local editor and Firebase caches
+.vscode/
+public/.vscode/
+.firebase/
