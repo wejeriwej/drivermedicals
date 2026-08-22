@@ -1505,10 +1505,7 @@ app.post("/api/create-booking-checkout", async (req, res) => {
       transaction.set(appointmentRef, appointmentData);
     });
 
-    const requestOrigin = req.get("origin");
-    const safeOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(requestOrigin || "")
-      ? requestOrigin
-      : (process.env.PUBLIC_BASE_URL || "https://oscereal-706d4.web.app");
+    const safeOrigin = process.env.PUBLIC_BASE_URL || "https://oscereal-706d4.web.app";
     const amount = paymentChoice === "full" ? 4300 : 500;
     const description = paymentChoice === "full"
       ? "Full payment for driver medical"
