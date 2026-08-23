@@ -31,6 +31,30 @@ const success = document.querySelector('#success');
 const API_BASE_URL = 'https://motor-medicals-api.onrender.com';
 const apiUrl = path => `${API_BASE_URL}${path}`;
 
+const councilAvailabilityNote = document.createElement('p');
+councilAvailabilityNote.className = 'council-availability-note';
+councilAvailabilityNote.hidden = true;
+councilAvailabilityNote.innerHTML = '<strong>Is your licensing authority missing?</strong> We cannot complete a medical form for an authority that is not listed. Please contact your GP surgery or licensing authority to arrange the correct medical.';
+councilLabel?.after(councilAvailabilityNote);
+
+const sessionIncludesHeading = Array.from(document.querySelectorAll('.split h2'))
+  .find(heading => heading.textContent.includes('free eye test'));
+
+if (sessionIncludesHeading) {
+  const sessionIncludesContent = sessionIncludesHeading.parentElement;
+  sessionIncludesContent.classList.add('session-includes-content');
+  const hgvImage = document.createElement('img');
+  hgvImage.className = 'hgv-support-image';
+  hgvImage.src = 'art/hgv-medical-support.png';
+  hgvImage.alt = 'White HGV lorry at a logistics depot';
+  sessionIncludesContent.appendChild(hgvImage);
+}
+
+const phoneBookingHelp = document.createElement('p');
+phoneBookingHelp.className = 'booking-phone-help';
+phoneBookingHelp.innerHTML = 'Finding it difficult to book an appointment? <a href="tel:07480609640">Call 07480 609640</a> and we will help you book over the phone.';
+form?.querySelector('button[type="submit"]')?.after(phoneBookingHelp);
+
 const menu = document.querySelector('.menu');
 const nav = document.querySelector('nav');
 menu.onclick = () => nav.classList.toggle('open');
@@ -234,9 +258,11 @@ const councils = [
 function updateMedicalTypeFields() {
   if (type.value === 'Taxi / private-hire medical') {
     councilLabel.style.display = 'block';
+    councilAvailabilityNote.hidden = false;
     populateCouncilDropdown();
   } else {
     councilLabel.style.display = 'none';
+    councilAvailabilityNote.hidden = true;
     councilSelect.value = '';
   }
 
