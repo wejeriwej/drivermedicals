@@ -1404,22 +1404,60 @@ function appointmentBlocksSlot(data) {
   return expiry > Date.now();
 }
 
+function escapeHtml(value) {
+  const characters = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+  return String(value ?? "").replace(/[&<>"']/g, character => characters[character]);
+}
+
+function getRecordsGuidance(appointment) {
+  const council = String(appointment.council || "").toLowerCase();
+  const needsFullRecords = council.includes("tfl") || council.includes("full medical records") || council.includes("full records");
+
+  if (needsFullRecords) {
+    return {
+      level: "Full GP medical records",
+      detail: "Your selected licensing authority requires your full GP medical records. Bring a digital or printed copy; NHS App access on its own is not enough."
+    };
+  }
+
+  return {
+    level: "Recent GP medical summary",
+    detail: "Your selected licensing authority requires a recent GP medical summary. Bring a digital or printed copy and check its current requirements before attending."
+  };
+}
+
+function recordsRequestHtml(records) {
+  return `<h3>How to request your records from your GP</h3><ol><li>Contact your GP surgery by phone, email or online portal and request: <strong>${escapeHtml(records.level)}</strong>.</li><li>Give your full name, date of birth, address and NHS number if known.</li><li>Ask the surgery to provide the records in time for your appointment; it can take up to 28 days.</li><li>Bring a digital or printed copy with you. Do not rely on NHS App access alone.</li></ol>`;
+}
+
+function appointmentChecklistHtml(appointment, records) {
+  const remainingAmount = Number(appointment.remainingAmount || 0);
+  const balanceItem = remainingAmount > 0
+    ? `Bring <strong>£${(remainingAmount / 100).toFixed(2)} cash</strong> to pay the remaining balance at the clinic.`
+    : "No cash balance is due because you paid in full today.";
+
+  return `<h3>What to bring to your appointment</h3><ol><li><strong>Medical records:</strong> ${escapeHtml(records.level)}. ${escapeHtml(records.detail)}</li><li><strong>Photo ID and proof of address:</strong> passport or driving licence, plus a recent bank statement, utility bill or similar proof of address.</li><li><strong>Your medications:</strong> bring any medication you currently take.</li><li><strong>Glasses or contact lenses:</strong> bring those you use for driving.</li><li><strong>Medication list:</strong> bring an up-to-date prescription printout or list of all medicines and doses.</li><li><strong>Relevant medical evidence:</strong> bring clinic letters and, if you have diabetes, six weeks of blood glucose readings.</li><li><strong>Your council medical form:</strong> download the correct taxi or private-hire form from your licensing authority and bring it with you.</li><li><strong>Outstanding balance:</strong> ${balanceItem}</li></ol>`;
+}
+
 async function sendAppointmentEmails(appointment) {
   if (!bookingEmailTransport) return false;
   const paid = `£${(appointment.paidAmount / 100).toFixed(2)}`;
   const remaining = `£${(appointment.remainingAmount / 100).toFixed(2)}`;
+  const records = getRecordsGuidance(appointment);
+  const customerName = `${escapeHtml(appointment.firstName)} ${escapeHtml(appointment.lastName)}`;
+  const appointmentDetails = `<p><strong>Date:</strong> ${escapeHtml(appointment.date)}<br><strong>Time:</strong> ${escapeHtml(appointment.time)}<br><strong>Location:</strong> ${escapeHtml(appointment.clinic)}<br><strong>Medical type:</strong> ${escapeHtml(appointment.medicalType)}${appointment.council ? `<br><strong>Licensing authority:</strong> ${escapeHtml(appointment.council)}` : ""}<br><strong>Paid online:</strong> ${paid}<br><strong>Remaining balance:</strong> ${remaining}</p>`;
   try {
     await bookingEmailTransport.sendMail({
       to: appointment.email,
       from: process.env.GMAIL_USER,
       subject: "Your Motor Medicals Appointment Confirmation",
-      html: `<h2>Appointment Confirmed</h2><p>Dear ${appointment.firstName} ${appointment.lastName},</p><p><strong>Date:</strong> ${appointment.date}</p><p><strong>Time:</strong> ${appointment.time}</p><p><strong>Location:</strong> ${appointment.clinic}</p><p><strong>Medical type:</strong> ${appointment.medicalType}</p>${appointment.council ? `<p><strong>Council:</strong> ${appointment.council}</p>` : ""}<p><strong>Paid online:</strong> ${paid}</p><p><strong>Remaining balance payable in clinic:</strong> ${remaining}</p><p>Please arrive 10 minutes early with all required records and documents.</p><p>Questions? Call 07480 609640.</p>`
+      html: `<h2>Appointment Confirmed</h2><p>Dear ${customerName},</p>${appointmentDetails}<p>Please arrive 10 minutes early. Your records requirement is: <strong>${escapeHtml(records.level)}</strong>.</p><p>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(records)}<p>Questions? Call 07480 609640.</p>`
     });
     await bookingEmailTransport.sendMail({
       to: "zak.francillon@gmail.com",
       from: process.env.GMAIL_USER,
       subject: "New paid appointment booking",
-      html: `<h2>New Appointment</h2><p>${appointment.firstName} ${appointment.lastName}</p><p>${appointment.email} · ${appointment.phone}</p><p>${appointment.date} at ${appointment.time}</p><p>${appointment.medicalType} · ${appointment.clinic}</p><p>Paid: ${paid}; remaining: ${remaining}</p>`
+      html: `<h2>New Appointment</h2><p><strong>${customerName}</strong><br>${escapeHtml(appointment.email)} · ${escapeHtml(appointment.phone)}</p>${appointmentDetails}<p><strong>Records requirement:</strong> ${escapeHtml(records.level)} — ${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}`
     });
     return true;
   } catch (emailError) {
@@ -1536,6 +1574,43 @@ app.post("/api/create-booking-checkout", async (req, res) => {
     await appointmentRef.delete().catch(() => {});
     console.error("Booking checkout error:", error);
     res.status(500).json({ error: "Unable to start secure payment. Please try again." });
+  }
+});
+
+app.get("/api/booking-confirmation", async (req, res) => {
+  if (!motorMedicalsStripe) {
+    return res.status(503).json({ error: "Motor Medicals payments are not configured yet" });
+  }
+
+  const sessionId = String(req.query.session_id || "");
+  if (!sessionId) return res.status(400).json({ error: "Missing checkout session" });
+
+  try {
+    const session = await motorMedicalsStripe.checkout.sessions.retrieve(sessionId);
+    if (session.metadata?.bookingType !== "driver-medical" || session.payment_status !== "paid") {
+      return res.status(404).json({ error: "Confirmed booking not found" });
+    }
+
+    await confirmPaidAppointment(session);
+    const appointmentId = session.metadata.appointmentId;
+    const appointmentSnapshot = await admin.firestore().collection("appointments").doc(appointmentId).get();
+    if (!appointmentSnapshot.exists) return res.status(404).json({ error: "Confirmed booking not found" });
+
+    const appointment = appointmentSnapshot.data();
+    res.json({
+      firstName: appointment.firstName,
+      date: appointment.date,
+      time: appointment.time,
+      clinic: appointment.clinic,
+      medicalType: appointment.medicalType,
+      council: appointment.council,
+      paidAmount: appointment.paidAmount,
+      remainingAmount: appointment.remainingAmount,
+      records: getRecordsGuidance(appointment)
+    });
+  } catch (error) {
+    console.error("Booking confirmation lookup error:", error);
+    res.status(500).json({ error: "Unable to load your booking confirmation" });
   }
 });
 
