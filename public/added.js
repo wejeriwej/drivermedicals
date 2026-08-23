@@ -547,6 +547,12 @@ function openHealthChecklist() {
           <label><input type="radio" name="hasEpilepsy" value="no"> No</label>
         </fieldset>
         <div class="health-guidance" data-guidance="epilepsy" hidden><strong>Important Group 2 guidance</strong><p>For HGV, bus and coach licensing, a person with epilepsy generally needs to have been seizure-free for 10 years and not taken epilepsy medicine during that period before a licence may be considered. A one-off seizure can have different requirements. Taxi/private-hire rules vary by authority — check with your licensing authority or treating clinician before booking.</p></div>
+        <fieldset>
+          <legend>Do you have high blood pressure, or take medicine for it? *</legend>
+          <label><input type="radio" name="hasHighBloodPressure" value="yes" required> Yes</label>
+          <label><input type="radio" name="hasHighBloodPressure" value="no"> No</label>
+        </fieldset>
+        <div class="health-guidance" data-guidance="blood-pressure" hidden><strong>Have your blood pressure well controlled before attending</strong><p>Please see your GP or treating clinician before the appointment if your blood pressure is not well controlled. For HGV, bus and coach (Group 2) licences, resting blood pressure consistently at or above 180/100 mmHg means you must stop driving and notify DVLA until it is controlled. Your clinician and licensing authority make the final decision.</p></div>
         <label class="health-acknowledgement"><input type="checkbox" required> I have read the guidance and understand that I must bring the relevant documents and equipment to my appointment.</label>
         <button class="button" type="submit">I understand — continue to payment <span>→</span></button>
       </form>
@@ -557,8 +563,10 @@ function openHealthChecklist() {
   const diabetesFollowUp = overlay.querySelector('[data-follow-up="diabetes"]');
   const diabetesGuidance = overlay.querySelector('[data-guidance="diabetes"]');
   const epilepsyGuidance = overlay.querySelector('[data-guidance="epilepsy"]');
+  const bloodPressureGuidance = overlay.querySelector('[data-guidance="blood-pressure"]');
   const diabetesInputs = overlay.querySelectorAll('input[name="hasDiabetes"]');
   const epilepsyInputs = overlay.querySelectorAll('input[name="hasEpilepsy"]');
+  const bloodPressureInputs = overlay.querySelectorAll('input[name="hasHighBloodPressure"]');
   const treatmentInputs = overlay.querySelectorAll('input[name="usesInsulinOrHypoMeds"], input[name="usesSglt2"]');
 
   diabetesInputs.forEach(input => input.addEventListener('change', () => {
@@ -569,6 +577,9 @@ function openHealthChecklist() {
   }));
   epilepsyInputs.forEach(input => input.addEventListener('change', () => {
     epilepsyGuidance.hidden = input.value !== 'yes';
+  }));
+  bloodPressureInputs.forEach(input => input.addEventListener('change', () => {
+    bloodPressureGuidance.hidden = input.value !== 'yes';
   }));
   treatmentInputs.forEach(input => input.addEventListener('change', () => {
     const insulinOrHypoMeds = overlay.querySelector('input[name="usesInsulinOrHypoMeds"]:checked')?.value === 'yes';
