@@ -15,10 +15,11 @@ const bookingEmailTransport = process.env.GMAIL_USER && process.env.GMAIL_APP_PA
       service: "gmail",
       auth: {
         user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD
+        pass: process.env.GMAIL_APP_PASSWORD.replace(/\s+/g, "")
       }
     })
   : null;
+const bookingAdminEmail = process.env.BOOKING_ADMIN_EMAIL || "zak.franccillon@gmail.com";
 
 const app = express();
 app.use(express.static("public"));
@@ -1436,7 +1437,7 @@ function appointmentChecklistHtml(appointment, records) {
     ? `Bring <strong>£${(remainingAmount / 100).toFixed(2)} cash</strong> to pay the remaining balance at the clinic.`
     : "No cash balance is due because you paid in full today.";
 
-  return `<h3>What to bring to your appointment</h3><ol><li><strong>Medical records:</strong> ${escapeHtml(records.level)}. ${escapeHtml(records.detail)}</li><li><strong>Photo ID and proof of address:</strong> passport or driving licence, plus a recent bank statement, utility bill or similar proof of address.</li><li><strong>Your medications:</strong> bring any medication you currently take.</li><li><strong>Glasses or contact lenses:</strong> bring those you use for driving.</li><li><strong>Medication list:</strong> bring an up-to-date prescription printout or list of all medicines and doses.</li><li><strong>Relevant medical evidence:</strong> bring clinic letters and, if you have diabetes, six weeks of blood glucose readings.</li><li><strong>Your council medical form:</strong> download the correct taxi or private-hire form from your licensing authority and bring it with you.</li><li><strong>Outstanding balance:</strong> ${balanceItem}</li></ol>`;
+  return `<h3>What to bring to your appointment</h3><ol><li><strong>Medical records:</strong> ${escapeHtml(records.level)}. ${escapeHtml(records.detail)}</li><li><strong>Photo ID and proof of address:</strong> passport or driving licence, plus a recent bank statement, utility bill or similar proof of address.</li><li><strong>Glasses or contact lenses:</strong> bring those you use for driving.</li><li><strong>Medication list:</strong> bring an up-to-date prescription printout or list of all medicines and doses.</li><li><strong>Relevant medical evidence:</strong> bring clinic letters and, if you have diabetes, six weeks of blood glucose readings.</li><li><strong>Your council medical form:</strong> download the correct taxi or private-hire form from your licensing authority and bring it with you.</li><li><strong>Outstanding balance:</strong> ${balanceItem}</li></ol>`;
 }
 
 async function sendAppointmentEmails(appointment) {
@@ -1453,12 +1454,16 @@ async function sendAppointmentEmails(appointment) {
       subject: "Your Motor Medicals Appointment Confirmation",
       html: `<h2>Appointment Confirmed</h2><p>Dear ${customerName},</p>${appointmentDetails}<p>Please arrive 10 minutes early. Your records requirement is: <strong>${escapeHtml(records.level)}</strong>.</p><p>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(records)}<p>Questions? Call 07480 609640.</p>`
     });
-    await bookingEmailTransport.sendMail({
-      to: "zak.francillon@gmail.com",
-      from: process.env.GMAIL_USER,
-      subject: "New paid appointment booking",
-      html: `<h2>New Appointment</h2><p><strong>${customerName}</strong><br>${escapeHtml(appointment.email)} · ${escapeHtml(appointment.phone)}</p>${appointmentDetails}<p><strong>Records requirement:</strong> ${escapeHtml(records.level)} — ${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}`
-    });
+    try {
+      await bookingEmailTransport.sendMail({
+        to: bookingAdminEmail,
+        from: process.env.GMAIL_USER,
+        subject: "New paid appointment booking",
+        html: `<h2>New Appointment</h2><p><strong>${customerName}</strong><br>${escapeHtml(appointment.email)} · ${escapeHtml(appointment.phone)}</p>${appointmentDetails}<p><strong>Records requirement:</strong> ${escapeHtml(records.level)} — ${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}`
+      });
+    } catch (adminEmailError) {
+      console.error("❌ Admin appointment email error:", adminEmailError);
+    }
     return true;
   } catch (emailError) {
     console.error("❌ Appointment email error:", emailError);
