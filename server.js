@@ -1454,27 +1454,48 @@ function getRecordsGuidance(appointment) {
   if (needsFullRecords) {
     return {
       level: "Full GP medical records",
-      detail: "Your selected licensing authority requires your full GP medical records. Bring a digital or printed copy; NHS App access on its own is not enough."
+      detail: "Bring a digital or printed copy; NHS App access on its own is not enough."
     };
   }
 
   return {
     level: "Recent GP medical summary",
-    detail: "Your selected licensing authority requires a recent GP medical summary. Bring a digital or printed copy and check its current requirements before attending."
+    detail: "Bring a digital or printed copy and check your licensing authority’s current requirements before attending."
+  };
+}
+
+function getMedicalFormGuidance(appointment) {
+  const medicalType = String(appointment.medicalType || "").toLowerCase();
+
+  if (medicalType.includes("hgv") || medicalType.includes("lgv") || medicalType.includes("bus") || medicalType.includes("coach")) {
+    return {
+      label: "Your DVLA D4 medical form",
+      detail: "Bring a printed DVLA D4 medical examination report form for your Group 2 licence application or renewal."
+    };
+  }
+
+  return {
+    label: "Your council medical form",
+    detail: "Download the correct taxi or private-hire form from your licensing authority and bring it with you."
   };
 }
 
 function recordsRequestHtml(records) {
-  return `<h3>How to request your records from your GP</h3><ol><li>Contact your GP surgery by phone, email or online portal and request: <strong>${escapeHtml(records.level)}</strong>.</li><li>Give your full name, date of birth, address and NHS number if known.</li><li>Ask the surgery to provide the records in time for your appointment; it can take up to 28 days.</li><li>Bring a digital or printed copy with you. Do not rely on NHS App access alone.</li></ol>`;
+  return `<div class="email-records"><h3>How to request your records from your GP</h3><ol><li>Contact your GP surgery by phone, email or online portal and request: <strong>${escapeHtml(records.level)}</strong>.</li><li>Give your full name, date of birth, address and NHS number if known.</li><li>Ask the surgery to provide the records in time for your appointment; it can take up to 28 days.</li><li>Bring a digital or printed copy with you. Do not rely on NHS App access alone.</li></ol></div>`;
 }
 
 function appointmentChecklistHtml(appointment, records) {
+  const medicalForm = getMedicalFormGuidance(appointment);
   const remainingAmount = Number(appointment.remainingAmount || 0);
   const balanceItem = remainingAmount > 0
-    ? `Bring <strong>£${(remainingAmount / 100).toFixed(2)} cash</strong> to pay the remaining balance at the clinic.`
-    : "No cash balance is due because you paid in full today.";
+    ? `<li><span class="email-number">7</span><span><strong>Outstanding balance</strong><br>Bring <strong>£${(remainingAmount / 100).toFixed(2)} cash</strong> to pay the remaining balance at the clinic.</span></li>`
+    : "";
 
-  return `<h3>What to bring to your appointment</h3><ol><li><strong>Medical records:</strong> ${escapeHtml(records.level)}. ${escapeHtml(records.detail)}</li><li><strong>Photo ID and proof of address:</strong> passport or driving licence, plus a recent bank statement, utility bill or similar proof of address.</li><li><strong>Glasses or contact lenses:</strong> bring those you use for driving.</li><li><strong>Medication list:</strong> bring an up-to-date prescription printout or list of all medicines and doses.</li><li><strong>Relevant medical evidence:</strong> bring clinic letters and, if you have diabetes, six weeks of blood glucose readings.</li><li><strong>Your council medical form:</strong> download the correct taxi or private-hire form from your licensing authority and bring it with you.</li><li><strong>Outstanding balance:</strong> ${balanceItem}</li></ol>`;
+  return `<div class="email-checklist"><h3>What to bring to your appointment</h3><ol><li><span class="email-number">1</span><span><strong>Medical records</strong><br>${escapeHtml(records.level)}</span></li><li><span class="email-number">2</span><span><strong>Photo ID and proof of address</strong><br>Passport or driving licence, plus a recent bank statement, utility bill or similar proof of address.</span></li><li><span class="email-number">3</span><span><strong>Glasses or contact lenses</strong><br>Bring those you use for driving.</span></li><li><span class="email-number">4</span><span><strong>Medication list</strong><br>An up-to-date prescription printout or a list of all medicines and doses.</span></li><li><span class="email-number">5</span><span><strong>Relevant medical evidence</strong><br>Bring clinic letters and, if you have diabetes, six weeks of blood glucose readings.</span></li><li><span class="email-number">6</span><span><strong>${escapeHtml(medicalForm.label)}</strong><br>${escapeHtml(medicalForm.detail)}</span></li>${balanceItem}</ol></div>`;
+}
+
+function bookingEmailHtml({ title, preview, content }) {
+  return `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#17231e;"><div style="max-width:680px;margin:0 auto;padding:28px 16px;"><div style="padding:24px 28px;background:#0d5d48;border-radius:18px 18px 0 0;color:#ffffff;"><div style="font-size:13px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#bce9d7;">Motor Medicals</div><h1 style="margin:8px 0 0;font-size:29px;line-height:1.18;color:#ffffff;">${escapeHtml(title)}</h1></div><div style="padding:28px;background:#ffffff;border-radius:0 0 18px 18px;box-shadow:0 8px 24px rgba(23,35,30,.08);"><p style="margin:0 0 22px;color:#53625b;font-size:16px;line-height:1.6;">${preview}</p>${content}<p style="margin:28px 0 0;padding-top:22px;border-top:1px solid #e2e9e5;color:#53625b;font-size:14px;line-height:1.6;">Need help? Call <a href="tel:07480609640" style="color:#0d5d48;font-weight:700;text-decoration:none;">07480 609640</a>.</p></div></div><style>.email-details{width:100%;border-collapse:collapse;margin:20px 0;background:#edf8f2;border-radius:12px;overflow:hidden}.email-details td{padding:10px 14px;border-bottom:1px solid #d9eee2;font-size:14px;line-height:1.45}.email-details tr:last-child td{border:0}.email-details td:first-child{width:38%;color:#486258;font-weight:700}.email-checklist{margin-top:26px}.email-checklist h3,.email-records h3{margin:0 0 14px;color:#17382c;font-size:19px}.email-checklist ol,.email-records ol{margin:0;padding:0;list-style:none}.email-checklist li{display:flex;gap:11px;margin:0 0 12px;padding:13px;background:#f7faf8;border-radius:10px;color:#4d5e56;font-size:14px;line-height:1.5}.email-number{display:inline-block;flex:0 0 25px;width:25px;height:25px;border-radius:50%;background:#0d5d48;color:#fff;font-size:12px;line-height:25px;text-align:center;font-weight:700}.email-records{margin-top:28px;padding:20px;background:#fff8e9;border-radius:12px}.email-records li{margin:0 0 9px;padding-left:22px;position:relative;color:#5d553c;font-size:14px;line-height:1.5}.email-records li:before{content:'✓';position:absolute;left:0;color:#a06609;font-weight:700}</style></body></html>`;
 }
 
 async function sendAppointmentEmails(appointment) {
@@ -1482,18 +1503,27 @@ async function sendAppointmentEmails(appointment) {
   const remaining = `£${(appointment.remainingAmount / 100).toFixed(2)}`;
   const records = getRecordsGuidance(appointment);
   const customerName = `${escapeHtml(appointment.firstName)} ${escapeHtml(appointment.lastName)}`;
-  const appointmentDetails = `<p><strong>Date:</strong> ${escapeHtml(appointment.date)}<br><strong>Time:</strong> ${escapeHtml(appointment.time)}<br><strong>Location:</strong> ${escapeHtml(appointment.clinic)}<br><strong>Medical type:</strong> ${escapeHtml(appointment.medicalType)}${appointment.council ? `<br><strong>Licensing authority:</strong> ${escapeHtml(appointment.council)}` : ""}<br><strong>Paid online:</strong> ${paid}<br><strong>Remaining balance:</strong> ${remaining}</p>`;
+  const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(appointment.date)}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Location</td><td>${escapeHtml(appointment.clinic)}</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Paid online</td><td>${paid}</td></tr>${appointment.remainingAmount > 0 ? `<tr><td>Remaining balance</td><td>${remaining} cash at the clinic</td></tr>` : ""}</table>`;
+  const address = [appointment.addressLine1, appointment.addressLine2, appointment.city, appointment.postcode].filter(Boolean).map(escapeHtml).join(", ");
   try {
     await sendBookingEmail({
       to: appointment.email,
       subject: "Your Motor Medicals Appointment Confirmation",
-      html: `<h2>Appointment Confirmed</h2><p>Dear ${customerName},</p>${appointmentDetails}<p>Please arrive 10 minutes early. Your records requirement is: <strong>${escapeHtml(records.level)}</strong>.</p><p>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(records)}<p>Questions? Call 07480 609640.</p>`
+      html: bookingEmailHtml({
+        title: "Your appointment is confirmed",
+        preview: `Dear ${customerName}, please arrive 10 minutes early for your driver medical.`,
+        content: `${appointmentDetails}<p style="margin:22px 0 0;padding:16px;background:#edf8f2;border-left:4px solid #0d5d48;border-radius:8px;line-height:1.55;"><strong>Records required: ${escapeHtml(records.level)}</strong><br>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(records)}`
+      })
     });
     try {
       await sendBookingEmail({
         to: bookingAdminEmail,
         subject: "New paid appointment booking",
-        html: `<h2>New Appointment</h2><p><strong>${customerName}</strong><br>${escapeHtml(appointment.email)} · ${escapeHtml(appointment.phone)}</p>${appointmentDetails}<p><strong>Records requirement:</strong> ${escapeHtml(records.level)} — ${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}`
+        html: bookingEmailHtml({
+          title: "New paid appointment",
+          preview: `<strong>${customerName}</strong><br>${escapeHtml(appointment.email)} · ${escapeHtml(appointment.phone)}<br>${address}`,
+          content: `${appointmentDetails}<p style="margin:22px 0 0;padding:16px;background:#edf8f2;border-left:4px solid #0d5d48;border-radius:8px;line-height:1.55;"><strong>Records required: ${escapeHtml(records.level)}</strong><br>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}`
+        })
       });
     } catch (adminEmailError) {
       console.error("❌ Admin appointment email error:", adminEmailError);
@@ -1544,10 +1574,10 @@ app.post("/api/create-booking-checkout", async (req, res) => {
   }
   const {
     medicalType, clinic, date, time, firstName, lastName,
-    email, phone, postcode, council, paymentChoice
+    email, phone, addressLine1, addressLine2, city, postcode, council, paymentChoice
   } = req.body;
 
-  if (!medicalType || !clinic || !date || !time || !firstName || !lastName || !email || !phone || !postcode) {
+  if (!medicalType || !clinic || !date || !time || !firstName || !lastName || !email || !phone || !addressLine1 || !city || !postcode) {
     return res.status(400).json({ error: "Please complete every required booking field" });
   }
   if (!isBookableAppointment(date, time)) {
@@ -1561,7 +1591,7 @@ app.post("/api/create-booking-checkout", async (req, res) => {
   const appointmentRef = admin.firestore().collection("appointments").doc(appointmentId);
   const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 31 * 60 * 1000);
   const appointmentData = {
-    medicalType, clinic, date, time, firstName, lastName, email, phone, postcode,
+    medicalType, clinic, date, time, firstName, lastName, email, phone, addressLine1, addressLine2: addressLine2 || null, city, postcode,
     council: council || null,
     paymentChoice,
     status: "payment_pending",
@@ -1645,7 +1675,8 @@ app.get("/api/booking-confirmation", async (req, res) => {
       council: appointment.council,
       paidAmount: appointment.paidAmount,
       remainingAmount: appointment.remainingAmount,
-      records: getRecordsGuidance(appointment)
+      records: getRecordsGuidance(appointment),
+      medicalForm: getMedicalFormGuidance(appointment)
     });
   } catch (error) {
     console.error("Booking confirmation lookup error:", error);

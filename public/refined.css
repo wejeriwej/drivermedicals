@@ -85,22 +85,33 @@ body { font-family: "Segoe UI", Arial, sans-serif; }
   .hero-visual .appointment-card { right: 10px; bottom: -18px; }
 }
 
-.booking-success-page {
-  max-width: 850px;
-  margin: 0 auto;
-  padding: 80px 24px;
-}
-
-.booking-success-page h1 { font-size: clamp(2.6rem, 6vw, 4.5rem); letter-spacing: -2.5px; margin: 0 0 18px; }
-.booking-success-page > p { max-width: 650px; color: var(--muted); }
-.success-checklist, .success-records { margin: 36px 0; padding: 28px; border-radius: 10px; }
-.success-checklist { background: var(--pale); }
-.success-records { border: 1px solid var(--line); }
-.success-checklist h2, .success-records h2 { font-size: 1.65rem; letter-spacing: -1px; }
-.success-checklist ol, .success-records ol { display: grid; gap: 13px; padding: 0; list-style: none; }
-.success-checklist li { display: flex; gap: 13px; align-items: flex-start; }
-.success-checklist b { display: grid; flex: none; place-items: center; width: 27px; height: 27px; border-radius: 50%; background: var(--green); color: #fff; font-size: .78rem; }
-.success-records li { color: var(--muted); }
+.success-body { background: #f6f9f7; }
+.booking-success-page { max-width: 850px; margin: 0 auto; padding: 68px 24px 88px; }
+.confirmation-hero { position: relative; overflow: hidden; padding: 42px; border-radius: 22px; background: linear-gradient(135deg, #0a5945, #0f7359); color: #fff; box-shadow: 0 18px 45px rgba(14, 86, 66, .2); }
+.confirmation-hero::after { content: ''; position: absolute; top: -100px; right: -70px; width: 280px; height: 280px; border-radius: 50%; background: rgba(255,255,255,.08); }
+.confirmation-hero .eyebrow { color: #b8ead8; }
+.confirmation-hero h1 { position: relative; z-index: 1; max-width: 580px; margin: 0 0 12px; color: #fff; font-size: clamp(2.35rem, 6vw, 4.3rem); letter-spacing: -2.5px; line-height: 1.02; }
+.confirmation-hero > p:last-child { position: relative; z-index: 1; max-width: 600px; margin: 0; color: #e2f5ed; font-size: 1.02rem; line-height: 1.65; }
+.success-tick { display: grid; position: relative; z-index: 1; place-items: center; width: 42px; height: 42px; margin-bottom: 22px; border-radius: 50%; background: #dff9eb; color: #0a6148; font-size: 1.35rem; font-weight: 900; }
+.success-checklist, .success-records { margin: 28px 0; padding: 34px; border-radius: 18px; }
+.success-checklist { background: #fff; box-shadow: 0 10px 28px rgba(24, 56, 43, .07); }
+.success-records { border: 1px solid #dce8e1; background: #fbfdfc; }
+.section-heading { margin-bottom: 22px; }
+.section-heading .eyebrow { margin-bottom: 7px; }
+.success-checklist h2, .success-records h2 { margin: 0; color: #17362b; font-size: 1.8rem; letter-spacing: -1.2px; }
+.success-checklist ol, .success-records ol { display: grid; gap: 12px; margin: 22px 0 0; padding: 0; list-style: none; }
+.success-checklist li, .success-records li { display: flex; gap: 13px; align-items: flex-start; padding: 14px; border-radius: 11px; }
+.success-checklist li { background: #f5f9f7; }
+.success-checklist li > span, .success-records li > span { display: grid; gap: 4px; line-height: 1.45; }
+.success-checklist small { color: #617269; font-size: .87rem; }
+.success-checklist b, .success-records li b { display: grid; flex: none; place-items: center; width: 27px; height: 27px; border-radius: 50%; background: var(--green); color: #fff; font-size: .78rem; }
+.success-records > p:not(.eyebrow) { color: var(--muted); line-height: 1.65; }
+.success-records h3 { margin: 28px 0 0; color: #17362b; font-size: 1.1rem; }
+.records-requirement { padding: 14px 16px; border-left: 4px solid #0e7658; border-radius: 7px; background: #edf8f2; color: #174b39 !important; }
+.success-records li { padding: 0; color: var(--muted); }
+.success-records li b { width: 25px; height: 25px; background: #e3f2eb; color: #0c694e; }
+.confirmation-button { display: inline-flex; margin-top: 8px; }
+@media (max-width: 560px) { .booking-success-page { padding: 35px 16px 60px; } .confirmation-hero, .success-checklist, .success-records { padding: 24px; border-radius: 16px; } .confirmation-hero h1 { font-size: 2.65rem; } .success-checklist h2, .success-records h2 { font-size: 1.55rem; } }
 
 .records-warning {
   margin: 20px 0;

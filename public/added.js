@@ -1,4 +1,17 @@
 const form = document.querySelector('#booking-form');
+const postcodeLabel = form?.querySelector('input[name="postcode"]')?.closest('label');
+
+if (postcodeLabel) {
+  const addressFields = document.createElement('div');
+  addressFields.className = 'booking-address-fields';
+  addressFields.innerHTML = `
+    <label>Address line 1 *<input name="addressLine1" autocomplete="address-line1" required></label>
+    <label>Address line 2 <input name="addressLine2" autocomplete="address-line2"></label>
+    <div class="formrow"><label>Town / city *<input name="city" autocomplete="address-level2" required></label><label>Postcode *<input name="postcode" autocomplete="postal-code" required></label></div>
+  `;
+  postcodeLabel.replaceWith(addressFields);
+}
+
 const type = document.querySelector('#medical-type');
 const councilLabel = document.querySelector('#council-label');
 const councilSelect = document.querySelector('#council-select');
@@ -517,6 +530,9 @@ form.onsubmit = async (event) => {
     lastName: formData.get('lastName'),
     email: formData.get('email'),
     phone: formData.get('phone'),
+    addressLine1: formData.get('addressLine1'),
+    addressLine2: formData.get('addressLine2'),
+    city: formData.get('city'),
     postcode: formData.get('postcode'),
     council: formData.get('council'),
     paymentChoice: formData.get('paymentChoice')
