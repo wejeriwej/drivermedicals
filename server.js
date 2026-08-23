@@ -1337,6 +1337,11 @@ function dateFromKey(value) {
   return new Date(Date.UTC(year, month - 1, day, 12));
 }
 
+function displayAppointmentDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : String(value || "");
+}
+
 function timeSlotMinutes(time) {
   const match = /^(\d{1,2}):(\d{2})(am|pm)$/.exec(time);
   if (!match) return NaN;
@@ -1351,7 +1356,7 @@ function isFutureSlot(date, time, now = londonNow()) {
 
 function isBookableAppointment(date, time) {
   const appointmentDate = dateFromKey(date);
-  if (Number.isNaN(appointmentDate.getTime()) || appointmentDate.getUTCDay() !== 2) return false;
+  if (Number.isNaN(appointmentDate.getTime()) || appointmentDate.getUTCDay() !== 3) return false;
 
   const now = londonNow();
   const lastBookableDate = dateFromKey(now.date);
@@ -1376,27 +1381,27 @@ app.get("/api/available-dates", async (req, res) => {
       bookedSlotsByDate.set(data.date, bookedSlots);
     });
     
-    // Generate next 8 Tuesdays
+    // Generate the next 8 Wednesday clinics.
     const dates = [];
     const now = londonNow();
-    let nextTuesday = dateFromKey(now.date);
-    while (nextTuesday.getUTCDay() !== 2) {
-      nextTuesday.setUTCDate(nextTuesday.getUTCDate() + 1);
+    let nextWednesday = dateFromKey(now.date);
+    while (nextWednesday.getUTCDay() !== 3) {
+      nextWednesday.setUTCDate(nextWednesday.getUTCDate() + 1);
     }
-    // After the final clinic slot has begun, start with next week's Tuesday.
-    if (dateKey(nextTuesday) === now.date && now.minutes >= 1290) {
-      nextTuesday.setUTCDate(nextTuesday.getUTCDate() + 7);
+    // After the final clinic slot has begun, start with next week's Wednesday.
+    if (dateKey(nextWednesday) === now.date && now.minutes >= 1290) {
+      nextWednesday.setUTCDate(nextWednesday.getUTCDate() + 7);
     }
     
     for (let i = 0; i < 8; i++) {
-      const day = new Date(nextTuesday);
+      const day = new Date(nextWednesday);
       day.setUTCDate(day.getUTCDate() + i * 7);
       const dateStr = dateKey(day);
       const futureSlots = appointmentTimeSlots().filter(time => isFutureSlot(dateStr, time, now));
       const bookedSlots = bookedSlotsByDate.get(dateStr) || new Set();
       dates.push({
         date: dateStr,
-        label: day.toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }),
+        label: displayAppointmentDate(dateStr),
         available: futureSlots.some(time => !bookedSlots.has(time))
       });
     }
@@ -1484,6 +1489,10 @@ function recordsRequestHtml(records) {
   return `<div class="email-records"><h3>How to request your records from your GP</h3><ol><li>Contact your GP surgery by phone, email or online portal and request: <strong>${escapeHtml(records.level)}</strong>.</li><li>Give your full name, date of birth, address and NHS number if known.</li><li>Ask the surgery to provide the records in time for your appointment; it can take up to 28 days.</li><li>Bring a digital or printed copy with you. Do not rely on NHS App access alone.</li></ol></div>`;
 }
 
+function clinicTravelHtml() {
+  return `<div class="email-travel"><h3>London Clinic – Greenwich</h3><p class="email-address"><strong>Linear House</strong><br>Peyton Place<br>London<br>SE10 8RS</p><p><strong>Parking:</strong> Three paid on-street parking spaces are available on Peyton Place. Further parking is available nearby at Burney Street Car Park; please check signs and current charges.</p><p><strong>Train and DLR:</strong> Greenwich Station is a short walk away, with DLR and National Rail services.</p><p><strong>Bus:</strong> Nearby routes include 129, 177, 199 and 386. The N199 also serves the area at night.</p></div>`;
+}
+
 function appointmentChecklistHtml(appointment, records) {
   const medicalForm = getMedicalFormGuidance(appointment);
   const remainingAmount = Number(appointment.remainingAmount || 0);
@@ -1491,11 +1500,11 @@ function appointmentChecklistHtml(appointment, records) {
     ? `<li><span class="email-number">7</span><span><strong>Outstanding balance</strong><br>Bring <strong>£${(remainingAmount / 100).toFixed(2)} cash</strong> to pay the remaining balance at the clinic.</span></li>`
     : "";
 
-  return `<div class="email-checklist"><h3>What to bring to your appointment</h3><ol><li><span class="email-number">1</span><span><strong>Medical records</strong><br>${escapeHtml(records.level)}</span></li><li><span class="email-number">2</span><span><strong>Photo ID and proof of address</strong><br>Passport or driving licence, plus a recent bank statement, utility bill or similar proof of address.</span></li><li><span class="email-number">3</span><span><strong>Glasses or contact lenses</strong><br>Bring those you use for driving.</span></li><li><span class="email-number">4</span><span><strong>Medication list</strong><br>An up-to-date prescription printout or a list of all medicines and doses.</span></li><li><span class="email-number">5</span><span><strong>Relevant medical evidence</strong><br>Bring clinic letters and, if you have diabetes, six weeks of blood glucose readings.</span></li><li><span class="email-number">6</span><span><strong>${escapeHtml(medicalForm.label)}</strong><br>${escapeHtml(medicalForm.detail)}</span></li>${balanceItem}</ol></div>`;
+  return `<div class="email-checklist"><h3>What to bring to your appointment</h3><ol><li><span class="email-number">1</span><span><strong>Medical records</strong><br>${escapeHtml(records.level)}</span></li><li><span class="email-number">2</span><span><strong>Photo ID and proof of address</strong><br>Passport or driving licence, plus a recent bank statement, utility bill or similar proof of address.</span></li><li><span class="email-number">3</span><span><strong>Glasses or contact lenses</strong><br>Bring those you use for driving.</span></li><li><span class="email-number">4</span><span><strong>Medication list</strong><br>An up-to-date prescription printout or a list of all medicines and doses.</span></li><li><span class="email-number">5</span><span><strong>Relevant medical evidence</strong><br>Bring any relevant clinic letters. If you use insulin or medicines that can cause low blood glucose (hypos), bring your blood glucose meter or continuous glucose monitor and at least six weeks of readings.</span></li><li><span class="email-number">6</span><span><strong>${escapeHtml(medicalForm.label)}</strong><br>${escapeHtml(medicalForm.detail)}</span></li>${balanceItem}</ol></div>`;
 }
 
 function bookingEmailHtml({ title, preview, content }) {
-  return `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#17231e;"><div style="max-width:680px;margin:0 auto;padding:28px 16px;"><div style="padding:24px 28px;background:#0d5d48;border-radius:18px 18px 0 0;color:#ffffff;"><div style="font-size:13px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#bce9d7;">Motor Medicals</div><h1 style="margin:8px 0 0;font-size:29px;line-height:1.18;color:#ffffff;">${escapeHtml(title)}</h1></div><div style="padding:28px;background:#ffffff;border-radius:0 0 18px 18px;box-shadow:0 8px 24px rgba(23,35,30,.08);"><p style="margin:0 0 22px;color:#53625b;font-size:16px;line-height:1.6;">${preview}</p>${content}<p style="margin:28px 0 0;padding-top:22px;border-top:1px solid #e2e9e5;color:#53625b;font-size:14px;line-height:1.6;">Need help? Call <a href="tel:07480609640" style="color:#0d5d48;font-weight:700;text-decoration:none;">07480 609640</a>.</p></div></div><style>.email-details{width:100%;border-collapse:collapse;margin:20px 0;background:#edf8f2;border-radius:12px;overflow:hidden}.email-details td{padding:10px 14px;border-bottom:1px solid #d9eee2;font-size:14px;line-height:1.45}.email-details tr:last-child td{border:0}.email-details td:first-child{width:38%;color:#486258;font-weight:700}.email-checklist{margin-top:26px}.email-checklist h3,.email-records h3{margin:0 0 14px;color:#17382c;font-size:19px}.email-checklist ol,.email-records ol{margin:0;padding:0;list-style:none}.email-checklist li{display:flex;gap:11px;margin:0 0 12px;padding:13px;background:#f7faf8;border-radius:10px;color:#4d5e56;font-size:14px;line-height:1.5}.email-number{display:inline-block;flex:0 0 25px;width:25px;height:25px;border-radius:50%;background:#0d5d48;color:#fff;font-size:12px;line-height:25px;text-align:center;font-weight:700}.email-records{margin-top:28px;padding:20px;background:#fff8e9;border-radius:12px}.email-records li{margin:0 0 9px;padding-left:22px;position:relative;color:#5d553c;font-size:14px;line-height:1.5}.email-records li:before{content:'✓';position:absolute;left:0;color:#a06609;font-weight:700}</style></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#17231e;"><div style="max-width:680px;margin:0 auto;padding:28px 16px;"><div style="padding:24px 28px;background:#0d5d48;border-radius:18px 18px 0 0;color:#ffffff;"><div style="font-size:13px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#bce9d7;">Motor Medicals</div><h1 style="margin:8px 0 0;font-size:29px;line-height:1.18;color:#ffffff;">${escapeHtml(title)}</h1></div><div style="padding:28px;background:#ffffff;border-radius:0 0 18px 18px;box-shadow:0 8px 24px rgba(23,35,30,.08);"><p style="margin:0 0 22px;color:#53625b;font-size:16px;line-height:1.6;">${preview}</p>${content}<p style="margin:28px 0 0;padding-top:22px;border-top:1px solid #e2e9e5;color:#53625b;font-size:14px;line-height:1.6;">Need help? Call <a href="tel:07480609640" style="color:#0d5d48;font-weight:700;text-decoration:none;">07480 609640</a>.</p></div></div><style>.email-details{width:100%;border-collapse:collapse;margin:20px 0;background:#edf8f2;border-radius:12px;overflow:hidden}.email-details td{padding:10px 14px;border-bottom:1px solid #d9eee2;font-size:14px;line-height:1.45}.email-details tr:last-child td{border:0}.email-details td:first-child{width:38%;color:#486258;font-weight:700}.email-checklist{margin-top:26px}.email-checklist h3,.email-records h3,.email-travel h3{margin:0 0 14px;color:#17382c;font-size:19px}.email-checklist ol,.email-records ol{margin:0;padding:0;list-style:none}.email-checklist li{display:flex;gap:11px;margin:0 0 12px;padding:13px;background:#f7faf8;border-radius:10px;color:#4d5e56;font-size:14px;line-height:1.5}.email-number{display:inline-block;flex:0 0 25px;width:25px;height:25px;border-radius:50%;background:#0d5d48;color:#fff;font-size:12px;line-height:25px;text-align:center;font-weight:700}.email-records{margin-top:28px;padding:20px;background:#fff8e9;border-radius:12px}.email-records li{margin:0 0 9px;padding-left:22px;position:relative;color:#5d553c;font-size:14px;line-height:1.5}.email-records li:before{content:'✓';position:absolute;left:0;color:#a06609;font-weight:700}.email-travel{margin-top:24px;padding:20px;border:1px solid #d7e8df;border-radius:12px;background:#f6faf8;color:#4d5e56;font-size:14px;line-height:1.55}.email-travel p{margin:9px 0}.email-travel .email-address{padding:12px 14px;border-left:4px solid #0d5d48;background:#edf8f2;border-radius:7px;color:#294b3e}</style></body></html>`;
 }
 
 async function sendAppointmentEmails(appointment) {
@@ -1503,7 +1512,7 @@ async function sendAppointmentEmails(appointment) {
   const remaining = `£${(appointment.remainingAmount / 100).toFixed(2)}`;
   const records = getRecordsGuidance(appointment);
   const customerName = `${escapeHtml(appointment.firstName)} ${escapeHtml(appointment.lastName)}`;
-  const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(appointment.date)}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Location</td><td>${escapeHtml(appointment.clinic)}</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Paid online</td><td>${paid}</td></tr>${appointment.remainingAmount > 0 ? `<tr><td>Remaining balance</td><td>${remaining} cash at the clinic</td></tr>` : ""}</table>`;
+  const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(displayAppointmentDate(appointment.date))}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Location</td><td>${escapeHtml(appointment.clinic)}</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Paid online</td><td>${paid}</td></tr>${appointment.remainingAmount > 0 ? `<tr><td>Remaining balance</td><td>${remaining} cash at the clinic</td></tr>` : ""}</table>`;
   const address = [appointment.addressLine1, appointment.addressLine2, appointment.city, appointment.postcode].filter(Boolean).map(escapeHtml).join(", ");
   try {
     await sendBookingEmail({
@@ -1512,7 +1521,7 @@ async function sendAppointmentEmails(appointment) {
       html: bookingEmailHtml({
         title: "Your appointment is confirmed",
         preview: `Dear ${customerName}, please arrive 10 minutes early for your driver medical.`,
-        content: `${appointmentDetails}<p style="margin:22px 0 0;padding:16px;background:#edf8f2;border-left:4px solid #0d5d48;border-radius:8px;line-height:1.55;"><strong>Records required: ${escapeHtml(records.level)}</strong><br>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(records)}`
+        content: `${appointmentDetails}${clinicTravelHtml()}<p style="margin:22px 0 0;padding:16px;background:#edf8f2;border-left:4px solid #0d5d48;border-radius:8px;line-height:1.55;"><strong>Records required: ${escapeHtml(records.level)}</strong><br>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(records)}`
       })
     });
     try {
@@ -1522,7 +1531,7 @@ async function sendAppointmentEmails(appointment) {
         html: bookingEmailHtml({
           title: "New paid appointment",
           preview: `<strong>${customerName}</strong><br>${escapeHtml(appointment.email)} · ${escapeHtml(appointment.phone)}<br>${address}`,
-          content: `${appointmentDetails}<p style="margin:22px 0 0;padding:16px;background:#edf8f2;border-left:4px solid #0d5d48;border-radius:8px;line-height:1.55;"><strong>Records required: ${escapeHtml(records.level)}</strong><br>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}`
+          content: `${appointmentDetails}${clinicTravelHtml()}<p style="margin:22px 0 0;padding:16px;background:#edf8f2;border-left:4px solid #0d5d48;border-radius:8px;line-height:1.55;"><strong>Records required: ${escapeHtml(records.level)}</strong><br>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}`
         })
       });
     } catch (adminEmailError) {
@@ -1581,7 +1590,7 @@ app.post("/api/create-booking-checkout", async (req, res) => {
     return res.status(400).json({ error: "Please complete every required booking field" });
   }
   if (!isBookableAppointment(date, time)) {
-    return res.status(400).json({ error: "Please choose an available Tuesday appointment slot" });
+    return res.status(400).json({ error: "Please choose an available Wednesday appointment slot" });
   }
   if (!['deposit', 'full'].includes(paymentChoice)) {
     return res.status(400).json({ error: "Choose whether to pay the £5 deposit or the full £43" });
@@ -1668,7 +1677,7 @@ app.get("/api/booking-confirmation", async (req, res) => {
     const appointment = appointmentSnapshot.data();
     res.json({
       firstName: appointment.firstName,
-      date: appointment.date,
+      date: displayAppointmentDate(appointment.date),
       time: appointment.time,
       clinic: appointment.clinic,
       medicalType: appointment.medicalType,
@@ -1711,7 +1720,7 @@ app.post("/api/book-appointment", async (req, res) => {
 
     if (!isBookableAppointment(date, time)) {
       console.error("❌ Invalid appointment slot:", { date, time });
-      return res.status(400).json({ error: "Please choose an available Tuesday appointment slot" });
+      return res.status(400).json({ error: "Please choose an available Wednesday appointment slot" });
     }
     
     console.log("✅ Validation passed, proceeding with booking");

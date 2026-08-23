@@ -31,23 +31,60 @@ const success = document.querySelector('#success');
 const API_BASE_URL = 'https://motor-medicals-api.onrender.com';
 const apiUrl = path => `${API_BASE_URL}${path}`;
 
+const clinicName = 'London Clinic – Greenwich, Linear House, Peyton Place, London SE10 8RS';
+if (clinicSelect) {
+  clinicSelect.innerHTML = `<option value="">Choose a clinic</option><option value="${clinicName}">London Clinic – Greenwich · Wednesday evenings</option>`;
+  const clinicLocationNote = document.createElement('div');
+  clinicLocationNote.className = 'clinic-location-note';
+  clinicLocationNote.hidden = true;
+  clinicLocationNote.innerHTML = '<strong>London Clinic – Greenwich</strong><address>Linear House<br>Peyton Place<br>London<br>SE10 8RS</address><p><b>Getting here:</b> Three paid on-street parking spaces are available on Peyton Place, with further parking at Burney Street Car Park. Greenwich Station is a short walk away for DLR and National Rail services. Nearby buses include 129, 177, 199 and 386, plus the N199 night bus.</p>';
+  clinicSelect.closest('label')?.after(clinicLocationNote);
+  clinicSelect.addEventListener('change', () => {
+    clinicLocationNote.hidden = !clinicSelect.value;
+  });
+}
+
+const notice = document.querySelector('.notice');
+if (notice?.firstChild) notice.firstChild.textContent = 'London Clinic – Greenwich · Wednesday evenings ';
+const heroEyebrow = document.querySelector('.hero .eyebrow');
+if (heroEyebrow) heroEyebrow.textContent = 'Driver medicals at our London Clinic – Greenwich';
+const heroClinicDay = document.querySelector('.hero ul li:last-child');
+if (heroClinicDay) heroClinicDay.textContent = '✓ Wednesday evenings';
+const appointmentCardDay = document.querySelector('.appointment-card strong');
+if (appointmentCardDay) appointmentCardDay.textContent = 'Wednesday evening';
+const appointmentCardLocation = document.querySelector('.appointment-card > p');
+if (appointmentCardLocation) appointmentCardLocation.textContent = 'London Clinic – Greenwich';
+const locationHighlight = document.querySelector('.highlights div:last-child');
+if (locationHighlight) {
+  locationHighlight.querySelector('b').textContent = 'London Clinic – Greenwich';
+  locationHighlight.querySelector('span').textContent = 'Wednesdays, 6:30pm–9:30pm';
+}
+const bookingHeading = document.querySelector('.booking > div h2');
+if (bookingHeading) bookingHeading.textContent = 'Choose your Wednesday appointment.';
+const bookingIntroduction = document.querySelector('.booking > div > p:not(.eyebrow):not(.price)');
+if (bookingIntroduction) bookingIntroduction.textContent = 'Appointments at our London Clinic – Greenwich, based at Linear House, are available on Wednesday evenings every 15 minutes from 6:30pm to 9:30pm.';
+const dateLegend = document.querySelector('#date-fieldset legend');
+if (dateLegend) dateLegend.textContent = 'Choose a Wednesday *';
+const description = document.querySelector('meta[name="description"]');
+if (description) description.content = 'Book an affordable £43 driver medical at our London Clinic – Greenwich, including a free eye test.';
+
 const councilAvailabilityNote = document.createElement('p');
 councilAvailabilityNote.className = 'council-availability-note';
 councilAvailabilityNote.hidden = true;
 councilAvailabilityNote.innerHTML = '<strong>Is your licensing authority missing?</strong> We cannot complete a medical form for an authority that is not listed. Please contact your GP surgery or licensing authority to arrange the correct medical.';
 councilLabel?.after(councilAvailabilityNote);
+councilAvailabilityNote.after(recordsWarning);
 
 const sessionIncludesHeading = Array.from(document.querySelectorAll('.split h2'))
   .find(heading => heading.textContent.includes('free eye test'));
 
 if (sessionIncludesHeading) {
-  const sessionIncludesContent = sessionIncludesHeading.parentElement;
-  sessionIncludesContent.classList.add('session-includes-content');
+  const sessionVisual = document.querySelector('.service-visual');
   const hgvImage = document.createElement('img');
   hgvImage.className = 'hgv-support-image';
   hgvImage.src = 'art/hgv-medical-support.png';
   hgvImage.alt = 'White HGV lorry at a logistics depot';
-  sessionIncludesContent.appendChild(hgvImage);
+  sessionVisual?.appendChild(hgvImage);
 }
 
 const phoneBookingHelp = document.createElement('p');
@@ -282,8 +319,10 @@ function updateMedicalTypeFields() {
 }
 
 type.onchange = updateMedicalTypeFields;
-councilSelect.onchange = updateRecordsWarning;
-clinicSelect.onchange = updateRecordsWarning;
+councilSelect.onchange = () => {
+  councilAvailabilityNote.hidden = Boolean(councilSelect.value);
+  updateRecordsWarning();
+};
 
 function recordsRequirement() {
   if (type.value === 'Taxi / private-hire medical') {
@@ -310,7 +349,7 @@ function recordsRequirement() {
 
 function updateRecordsWarning() {
   const requirement = recordsRequirement();
-  if (!clinicSelect.value || !requirement) {
+  if (!requirement) {
     recordsWarning.style.display = 'none';
     return;
   }
@@ -387,6 +426,11 @@ function dateFromKey(value) {
   return new Date(Date.UTC(year, month - 1, day, 12));
 }
 
+function displayAppointmentDate(value) {
+  const [year, month, day] = value.split('-');
+  return year && month && day ? `${day}/${month}/${year}` : value;
+}
+
 function dateKey(date) {
   return [
     date.getUTCFullYear(),
@@ -405,20 +449,18 @@ function slotMinutes(time) {
 
 function fallbackDates() {
   const now = londonNow();
-  const nextTuesday = dateFromKey(now.date);
-  while (nextTuesday.getUTCDay() !== 2) nextTuesday.setUTCDate(nextTuesday.getUTCDate() + 1);
-  if (dateKey(nextTuesday) === now.date && now.minutes >= 1290) {
-    nextTuesday.setUTCDate(nextTuesday.getUTCDate() + 7);
+  const nextWednesday = dateFromKey(now.date);
+  while (nextWednesday.getUTCDay() !== 3) nextWednesday.setUTCDate(nextWednesday.getUTCDate() + 1);
+  if (dateKey(nextWednesday) === now.date && now.minutes >= 1290) {
+    nextWednesday.setUTCDate(nextWednesday.getUTCDate() + 7);
   }
 
   return Array.from({ length: 8 }, (_, index) => {
-    const day = new Date(nextTuesday);
+    const day = new Date(nextWednesday);
     day.setUTCDate(day.getUTCDate() + index * 7);
     return {
       date: dateKey(day),
-      label: day.toLocaleDateString('en-GB', {
-        timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short'
-      }),
+      label: displayAppointmentDate(dateKey(day)),
       available: true
     };
   });
@@ -549,35 +591,30 @@ function openHealthChecklist() {
       <h2 id="health-check-title">A quick health checklist</h2>
       <p class="health-check-intro">Please answer these questions so you know what to bring. This is not a licence decision — your doctor, DVLA and licensing authority make the final assessment.</p>
       <form id="health-check-form">
-        <fieldset>
-          <legend>Do you have diabetes? *</legend>
-          <label><input type="radio" name="hasDiabetes" value="yes" required> Yes</label>
-          <label><input type="radio" name="hasDiabetes" value="no"> No</label>
-        </fieldset>
+        <div class="health-question-card" role="group" aria-labelledby="diabetes-question">
+          <p class="health-question" id="diabetes-question">Do you have diabetes? *</p>
+          <div class="health-answer-options"><label><input type="radio" name="hasDiabetes" value="yes" required> Yes</label><label><input type="radio" name="hasDiabetes" value="no"> No</label></div>
+        </div>
         <div class="health-follow-up" data-follow-up="diabetes" hidden>
-          <fieldset>
-            <legend>Do you use insulin or medicine that can cause low blood glucose (hypos)? *</legend>
-            <label><input type="radio" name="usesInsulinOrHypoMeds" value="yes"> Yes</label>
-            <label><input type="radio" name="usesInsulinOrHypoMeds" value="no"> No</label>
-          </fieldset>
-          <fieldset>
-            <legend>Do you take dapagliflozin or another SGLT2 inhibitor? *</legend>
-            <label><input type="radio" name="usesSglt2" value="yes"> Yes</label>
-            <label><input type="radio" name="usesSglt2" value="no"> No</label>
-          </fieldset>
+          <div class="health-question-card" role="group" aria-labelledby="hypo-medicine-question">
+            <p class="health-question" id="hypo-medicine-question">Do you use insulin or medicine that can cause low blood glucose (hypos)? *</p>
+            <div class="health-answer-options"><label><input type="radio" name="usesInsulinOrHypoMeds" value="yes"> Yes</label><label><input type="radio" name="usesInsulinOrHypoMeds" value="no"> No</label></div>
+          </div>
+          <div class="health-question-card" role="group" aria-labelledby="sglt2-question">
+            <p class="health-question" id="sglt2-question">Do you take dapagliflozin or another SGLT2 inhibitor? *</p>
+            <div class="health-answer-options"><label><input type="radio" name="usesSglt2" value="yes"> Yes</label><label><input type="radio" name="usesSglt2" value="no"> No</label></div>
+          </div>
           <div class="health-guidance" data-guidance="diabetes" hidden></div>
         </div>
-        <fieldset>
-          <legend>Do you have epilepsy or a history of seizures? *</legend>
-          <label><input type="radio" name="hasEpilepsy" value="yes" required> Yes</label>
-          <label><input type="radio" name="hasEpilepsy" value="no"> No</label>
-        </fieldset>
+        <div class="health-question-card" role="group" aria-labelledby="epilepsy-question">
+          <p class="health-question" id="epilepsy-question">Do you have epilepsy or a history of seizures? *</p>
+          <div class="health-answer-options"><label><input type="radio" name="hasEpilepsy" value="yes" required> Yes</label><label><input type="radio" name="hasEpilepsy" value="no"> No</label></div>
+        </div>
         <div class="health-guidance" data-guidance="epilepsy" hidden><strong>Important Group 2 guidance</strong><p>For HGV, bus and coach licensing, a person with epilepsy generally needs to have been seizure-free for 10 years and not taken epilepsy medicine during that period before a licence may be considered. A one-off seizure can have different requirements. Taxi/private-hire rules vary by authority — check with your licensing authority or treating clinician before booking.</p></div>
-        <fieldset>
-          <legend>Do you have high blood pressure, or take medicine for it? *</legend>
-          <label><input type="radio" name="hasHighBloodPressure" value="yes" required> Yes</label>
-          <label><input type="radio" name="hasHighBloodPressure" value="no"> No</label>
-        </fieldset>
+        <div class="health-question-card" role="group" aria-labelledby="blood-pressure-question">
+          <p class="health-question" id="blood-pressure-question">Do you have high blood pressure, or take medicine for it? *</p>
+          <div class="health-answer-options"><label><input type="radio" name="hasHighBloodPressure" value="yes" required> Yes</label><label><input type="radio" name="hasHighBloodPressure" value="no"> No</label></div>
+        </div>
         <div class="health-guidance" data-guidance="blood-pressure" hidden><strong>Have your blood pressure well controlled before attending</strong><p>Please see your GP or treating clinician before the appointment if your blood pressure is not well controlled. For HGV, bus and coach (Group 2) licences, resting blood pressure consistently at or above 180/100 mmHg means you must stop driving and notify DVLA until it is controlled. Your clinician and licensing authority make the final decision.</p></div>
         <label class="health-acknowledgement"><input type="checkbox" required> I have read the guidance and understand that I must bring the relevant documents and equipment to my appointment.</label>
         <button class="button" type="submit">I understand — continue to payment <span>→</span></button>
@@ -599,7 +636,10 @@ function openHealthChecklist() {
     const hasDiabetes = input.value === 'yes';
     diabetesFollowUp.hidden = !hasDiabetes;
     diabetesFollowUp.querySelectorAll('input').forEach(field => field.required = hasDiabetes);
-    if (!hasDiabetes) diabetesGuidance.hidden = true;
+    if (!hasDiabetes) {
+      diabetesFollowUp.querySelectorAll('input').forEach(field => field.checked = false);
+      diabetesGuidance.hidden = true;
+    }
   }));
   epilepsyInputs.forEach(input => input.addEventListener('change', () => {
     epilepsyGuidance.hidden = input.value !== 'yes';
