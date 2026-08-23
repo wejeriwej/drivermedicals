@@ -137,3 +137,21 @@ body { font-family: "Segoe UI", Arial, sans-serif; }
 .payment-choice b { color: var(--ink); font-size: .84rem; }
 .payment-choice small { margin-top: 2px; color: var(--muted); font-size: .73rem; font-weight: 500; }
 .payment-choice .voucher-note { margin: 4px 0 0; padding: 10px 12px; border-radius: 5px; background: #eaf5ef; color: var(--green); font-weight: 700; }
+
+.health-check-overlay { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 24px; background: rgba(10, 31, 23, .58); backdrop-filter: blur(5px); }
+.health-check-modal { position: relative; width: min(100%, 660px); max-height: calc(100vh - 48px); overflow-y: auto; padding: 34px; border-radius: 20px; background: #fff; box-shadow: 0 24px 80px rgba(0, 0, 0, .28); }
+.health-check-modal h2 { margin: 0 0 10px; color: #17362b; font-size: clamp(1.8rem, 4vw, 2.45rem); letter-spacing: -1.2px; }
+.health-check-intro { margin: 0 0 24px; color: var(--muted); line-height: 1.6; }
+.health-check-close { position: absolute; top: 17px; right: 19px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: #edf3ef; color: #315045; font-size: 1.5rem; line-height: 1; cursor: pointer; }
+.health-check-modal form { display: grid; gap: 16px; }
+.health-check-modal fieldset { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 16px; border: 1px solid #d9e7df; border-radius: 12px; }
+.health-check-modal legend { width: 100%; padding: 0 4px; color: #17362b; font-weight: 800; font-size: .94rem; }
+.health-check-modal fieldset label { display: inline-flex; align-items: center; gap: 7px; margin: 0; padding: 9px 12px; border-radius: 8px; background: #f5f9f7; color: #3f564b; font-size: .9rem; cursor: pointer; }
+.health-check-modal input[type="radio"], .health-check-modal input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--green); }
+.health-follow-up { display: grid; gap: 12px; padding: 0 0 0 14px; border-left: 3px solid #bfdcca; }
+.health-guidance { padding: 15px 17px; border-radius: 10px; background: #fff7e4; color: #614d1d; line-height: 1.55; font-size: .89rem; }
+.health-guidance strong { display: block; color: #745007; }
+.health-guidance p { margin: 6px 0 0; }
+.health-acknowledgement { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border-radius: 10px; background: #edf8f2; color: #284d3e; font-size: .9rem; line-height: 1.45; }
+.health-check-modal .button { justify-content: center; width: 100%; margin-top: 3px; }
+@media (max-width: 560px) { .health-check-overlay { padding: 12px; align-items: start; } .health-check-modal { max-height: calc(100vh - 24px); padding: 28px 20px; } .health-check-close { top: 13px; right: 13px; } }

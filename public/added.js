@@ -511,12 +511,98 @@ function selectTime(time, button) {
   timeField.value = time;
 }
 
+function openHealthChecklist() {
+  if (document.querySelector('.health-check-overlay')) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'health-check-overlay';
+  overlay.innerHTML = `
+    <section class="health-check-modal" role="dialog" aria-modal="true" aria-labelledby="health-check-title">
+      <button class="health-check-close" type="button" aria-label="Close health checklist">×</button>
+      <p class="eyebrow">Before payment</p>
+      <h2 id="health-check-title">A quick health checklist</h2>
+      <p class="health-check-intro">Please answer these questions so you know what to bring. This is not a licence decision — your doctor, DVLA and licensing authority make the final assessment.</p>
+      <form id="health-check-form">
+        <fieldset>
+          <legend>Do you have diabetes? *</legend>
+          <label><input type="radio" name="hasDiabetes" value="yes" required> Yes</label>
+          <label><input type="radio" name="hasDiabetes" value="no"> No</label>
+        </fieldset>
+        <div class="health-follow-up" data-follow-up="diabetes" hidden>
+          <fieldset>
+            <legend>Do you use insulin or medicine that can cause low blood glucose (hypos)? *</legend>
+            <label><input type="radio" name="usesInsulinOrHypoMeds" value="yes"> Yes</label>
+            <label><input type="radio" name="usesInsulinOrHypoMeds" value="no"> No</label>
+          </fieldset>
+          <fieldset>
+            <legend>Do you take dapagliflozin or another SGLT2 inhibitor? *</legend>
+            <label><input type="radio" name="usesSglt2" value="yes"> Yes</label>
+            <label><input type="radio" name="usesSglt2" value="no"> No</label>
+          </fieldset>
+          <div class="health-guidance" data-guidance="diabetes" hidden></div>
+        </div>
+        <fieldset>
+          <legend>Do you have epilepsy or a history of seizures? *</legend>
+          <label><input type="radio" name="hasEpilepsy" value="yes" required> Yes</label>
+          <label><input type="radio" name="hasEpilepsy" value="no"> No</label>
+        </fieldset>
+        <div class="health-guidance" data-guidance="epilepsy" hidden><strong>Important Group 2 guidance</strong><p>For HGV, bus and coach licensing, a person with epilepsy generally needs to have been seizure-free for 10 years and not taken epilepsy medicine during that period before a licence may be considered. A one-off seizure can have different requirements. Taxi/private-hire rules vary by authority — check with your licensing authority or treating clinician before booking.</p></div>
+        <label class="health-acknowledgement"><input type="checkbox" required> I have read the guidance and understand that I must bring the relevant documents and equipment to my appointment.</label>
+        <button class="button" type="submit">I understand — continue to payment <span>→</span></button>
+      </form>
+    </section>
+  `;
+
+  const close = () => overlay.remove();
+  const diabetesFollowUp = overlay.querySelector('[data-follow-up="diabetes"]');
+  const diabetesGuidance = overlay.querySelector('[data-guidance="diabetes"]');
+  const epilepsyGuidance = overlay.querySelector('[data-guidance="epilepsy"]');
+  const diabetesInputs = overlay.querySelectorAll('input[name="hasDiabetes"]');
+  const epilepsyInputs = overlay.querySelectorAll('input[name="hasEpilepsy"]');
+  const treatmentInputs = overlay.querySelectorAll('input[name="usesInsulinOrHypoMeds"], input[name="usesSglt2"]');
+
+  diabetesInputs.forEach(input => input.addEventListener('change', () => {
+    const hasDiabetes = input.value === 'yes';
+    diabetesFollowUp.hidden = !hasDiabetes;
+    diabetesFollowUp.querySelectorAll('input').forEach(field => field.required = hasDiabetes);
+    if (!hasDiabetes) diabetesGuidance.hidden = true;
+  }));
+  epilepsyInputs.forEach(input => input.addEventListener('change', () => {
+    epilepsyGuidance.hidden = input.value !== 'yes';
+  }));
+  treatmentInputs.forEach(input => input.addEventListener('change', () => {
+    const insulinOrHypoMeds = overlay.querySelector('input[name="usesInsulinOrHypoMeds"]:checked')?.value === 'yes';
+    const usesSglt2 = overlay.querySelector('input[name="usesSglt2"]:checked')?.value === 'yes';
+    if (!insulinOrHypoMeds && !usesSglt2) {
+      diabetesGuidance.hidden = true;
+      return;
+    }
+    diabetesGuidance.hidden = false;
+    diabetesGuidance.innerHTML = `${insulinOrHypoMeds ? '<strong>Bring six weeks of readings and your meter</strong><p>If you use insulin or medicines that can cause hypos, bring six weeks of blood-glucose readings and your blood-glucose meter (or access to your continuous monitor) to the appointment. Follow your clinician’s and licensing authority’s monitoring instructions when driving.</p>' : ''}${usesSglt2 ? '<strong>SGLT2 medicine note</strong><p>Dapagliflozin is not normally a hypo-causing medicine on its own, but it can have other important diabetes safety considerations. Bring your medication list and discuss any driving or sick-day advice with your treating clinician.</p>' : ''}`;
+  }));
+  overlay.querySelector('.health-check-close').addEventListener('click', close);
+  overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+  overlay.querySelector('#health-check-form').addEventListener('submit', event => {
+    event.preventDefault();
+    form.dataset.healthChecklistComplete = 'true';
+    close();
+    form.requestSubmit();
+  });
+  document.body.appendChild(overlay);
+  overlay.querySelector('input[name="hasDiabetes"]').focus();
+}
+
 // Form submission
 form.onsubmit = async (event) => {
   event.preventDefault();
   
   if (!dateField.value || !timeField.value) {
     success.textContent = 'Please choose a date and a time.';
+    return;
+  }
+
+  if (!form.dataset.healthChecklistComplete) {
+    openHealthChecklist();
     return;
   }
   
