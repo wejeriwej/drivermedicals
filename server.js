@@ -1342,6 +1342,18 @@ function displayAppointmentDate(value) {
   return match ? `${match[3]}/${match[2]}/${match[1]}` : String(value || "");
 }
 
+function calendarDateLabel(value) {
+  const date = dateFromKey(value);
+  const day = date.getUTCDate();
+  const remainder = day % 100;
+  const suffix = remainder >= 11 && remainder <= 13
+    ? "th"
+    : ({ 1: "st", 2: "nd", 3: "rd" }[day % 10] || "th");
+  const weekday = date.toLocaleDateString("en-GB", { timeZone: "UTC", weekday: "short" });
+  const month = date.toLocaleDateString("en-GB", { timeZone: "UTC", month: "short" });
+  return `${weekday} ${day}${suffix} ${month}`;
+}
+
 function timeSlotMinutes(time) {
   const match = /^(\d{1,2}):(\d{2})(am|pm)$/.exec(time);
   if (!match) return NaN;
@@ -1401,7 +1413,7 @@ app.get("/api/available-dates", async (req, res) => {
       const bookedSlots = bookedSlotsByDate.get(dateStr) || new Set();
       dates.push({
         date: dateStr,
-        label: displayAppointmentDate(dateStr),
+        label: calendarDateLabel(dateStr),
         available: futureSlots.some(time => !bookedSlots.has(time))
       });
     }

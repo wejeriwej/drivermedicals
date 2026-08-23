@@ -431,6 +431,18 @@ function displayAppointmentDate(value) {
   return year && month && day ? `${day}/${month}/${year}` : value;
 }
 
+function calendarDateLabel(value) {
+  const date = dateFromKey(value);
+  const day = date.getUTCDate();
+  const remainder = day % 100;
+  const suffix = remainder >= 11 && remainder <= 13
+    ? 'th'
+    : ({ 1: 'st', 2: 'nd', 3: 'rd' }[day % 10] || 'th');
+  const weekday = date.toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'short' });
+  const month = date.toLocaleDateString('en-GB', { timeZone: 'UTC', month: 'short' });
+  return `${weekday} ${day}${suffix} ${month}`;
+}
+
 function dateKey(date) {
   return [
     date.getUTCFullYear(),
@@ -460,7 +472,7 @@ function fallbackDates() {
     day.setUTCDate(day.getUTCDate() + index * 7);
     return {
       date: dateKey(day),
-      label: displayAppointmentDate(dateKey(day)),
+      label: calendarDateLabel(dateKey(day)),
       available: true
     };
   });
