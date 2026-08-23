@@ -20,6 +20,43 @@ const bookingEmailTransport = process.env.GMAIL_USER && process.env.GMAIL_APP_PA
     })
   : null;
 const bookingAdminEmail = process.env.BOOKING_ADMIN_EMAIL || "zak.francillon@gmail.com";
+const bookingSenderEmail = process.env.BREVO_SENDER_EMAIL || process.env.GMAIL_USER;
+
+async function sendBookingEmail({ to, subject, html }) {
+  if (process.env.BREVO_API_KEY && bookingSenderEmail) {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": process.env.BREVO_API_KEY,
+        "content-type": "application/json",
+        accept: "application/json"
+      },
+      body: JSON.stringify({
+        sender: { name: "Motor Medicals", email: bookingSenderEmail },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html
+      })
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Brevo email API returned ${response.status}: ${errorBody}`);
+    }
+    return response.json();
+  }
+
+  if (bookingEmailTransport) {
+    return bookingEmailTransport.sendMail({
+      to,
+      from: process.env.GMAIL_USER,
+      subject,
+      html
+    });
+  }
+
+  throw new Error("No booking email provider is configured");
+}
 
 const app = express();
 app.use(express.static("public"));
@@ -1441,23 +1478,20 @@ function appointmentChecklistHtml(appointment, records) {
 }
 
 async function sendAppointmentEmails(appointment) {
-  if (!bookingEmailTransport) return false;
   const paid = `£${(appointment.paidAmount / 100).toFixed(2)}`;
   const remaining = `£${(appointment.remainingAmount / 100).toFixed(2)}`;
   const records = getRecordsGuidance(appointment);
   const customerName = `${escapeHtml(appointment.firstName)} ${escapeHtml(appointment.lastName)}`;
   const appointmentDetails = `<p><strong>Date:</strong> ${escapeHtml(appointment.date)}<br><strong>Time:</strong> ${escapeHtml(appointment.time)}<br><strong>Location:</strong> ${escapeHtml(appointment.clinic)}<br><strong>Medical type:</strong> ${escapeHtml(appointment.medicalType)}${appointment.council ? `<br><strong>Licensing authority:</strong> ${escapeHtml(appointment.council)}` : ""}<br><strong>Paid online:</strong> ${paid}<br><strong>Remaining balance:</strong> ${remaining}</p>`;
   try {
-    await bookingEmailTransport.sendMail({
+    await sendBookingEmail({
       to: appointment.email,
-      from: process.env.GMAIL_USER,
       subject: "Your Motor Medicals Appointment Confirmation",
       html: `<h2>Appointment Confirmed</h2><p>Dear ${customerName},</p>${appointmentDetails}<p>Please arrive 10 minutes early. Your records requirement is: <strong>${escapeHtml(records.level)}</strong>.</p><p>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(records)}<p>Questions? Call 07480 609640.</p>`
     });
     try {
-      await bookingEmailTransport.sendMail({
+      await sendBookingEmail({
         to: bookingAdminEmail,
-        from: process.env.GMAIL_USER,
         subject: "New paid appointment booking",
         html: `<h2>New Appointment</h2><p><strong>${customerName}</strong><br>${escapeHtml(appointment.email)} · ${escapeHtml(appointment.phone)}</p>${appointmentDetails}<p><strong>Records requirement:</strong> ${escapeHtml(records.level)} — ${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}`
       });
