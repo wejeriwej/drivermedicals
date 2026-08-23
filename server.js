@@ -19,7 +19,7 @@ const bookingEmailTransport = process.env.GMAIL_USER && process.env.GMAIL_APP_PA
       }
     })
   : null;
-const bookingAdminEmail = process.env.BOOKING_ADMIN_EMAIL || "zak.franccillon@gmail.com";
+const bookingAdminEmail = process.env.BOOKING_ADMIN_EMAIL || "zak.francillon@gmail.com";
 
 const app = express();
 app.use(express.static("public"));
