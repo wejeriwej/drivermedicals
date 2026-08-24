@@ -1,5 +1,20 @@
 body { font-family: "Segoe UI", Arial, sans-serif; }
 
+.brand.brand-logo { flex: 0 0 auto; letter-spacing: 0; }
+header { height: 104px; }
+.brand-logo img { display: block; width: 260px; height: auto; }
+footer .brand-logo img { width: 285px; }
+footer { background: #031f28; }
+
+@media (max-width: 850px) {
+  header { height: 86px; }
+}
+
+@media (max-width: 520px) {
+  .brand-logo img { width: 205px; }
+  footer .brand-logo img { width: 245px; }
+}
+
 .hero {
   grid-template-columns: minmax(0, 1.05fr) minmax(380px, .95fr);
   min-height: 570px;

@@ -32,7 +32,7 @@ async function sendBookingEmail({ to, subject, html }) {
         accept: "application/json"
       },
       body: JSON.stringify({
-        sender: { name: "Motor Medicals", email: bookingSenderEmail },
+        sender: { name: "Pro Driver Medicals", email: bookingSenderEmail },
         to: [{ email: to }],
         subject,
         htmlContent: html
@@ -366,7 +366,7 @@ app.post(
   express.raw({ type: "application/json" }),
   async (req, res) => {
     if (!motorMedicalsStripe || !process.env.MOTOR_MEDICALS_STRIPE_WEBHOOK_SECRET) {
-      return res.status(503).send("Motor Medicals Stripe is not configured");
+      return res.status(503).send("Pro Driver Medicals payments are not configured");
     }
     let event;
     try {
@@ -376,7 +376,7 @@ app.post(
         process.env.MOTOR_MEDICALS_STRIPE_WEBHOOK_SECRET
       );
     } catch (error) {
-      console.error("❌ Motor Medicals webhook verification failed:", error.message);
+      console.error("❌ Pro Driver Medicals webhook verification failed:", error.message);
       return res.status(400).send(`Webhook Error: ${error.message}`);
     }
 
@@ -386,7 +386,7 @@ app.post(
           await confirmPaidAppointment(event.data.object);
         }
       } catch (bookingError) {
-        console.error("❌ Paid Motor Medicals appointment confirmation failed:", bookingError);
+        console.error("❌ Paid Pro Driver Medicals appointment confirmation failed:", bookingError);
         return res.status(500).json({ error: "Payment received but appointment confirmation failed" });
       }
     }
@@ -1516,7 +1516,7 @@ function appointmentChecklistHtml(appointment, records) {
 }
 
 function bookingEmailHtml({ title, preview, content }) {
-  return `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#17231e;"><div style="max-width:680px;margin:0 auto;padding:28px 16px;"><div style="padding:24px 28px;background:#0d5d48;border-radius:18px 18px 0 0;color:#ffffff;"><div style="font-size:13px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#bce9d7;">Motor Medicals</div><h1 style="margin:8px 0 0;font-size:29px;line-height:1.18;color:#ffffff;">${escapeHtml(title)}</h1></div><div style="padding:28px;background:#ffffff;border-radius:0 0 18px 18px;box-shadow:0 8px 24px rgba(23,35,30,.08);"><p style="margin:0 0 22px;color:#53625b;font-size:16px;line-height:1.6;">${preview}</p>${content}<p style="margin:28px 0 0;padding-top:22px;border-top:1px solid #e2e9e5;color:#53625b;font-size:14px;line-height:1.6;">Need help? Call <a href="tel:07480609640" style="color:#0d5d48;font-weight:700;text-decoration:none;">07480 609640</a>.</p></div></div><style>.email-details{width:100%;border-collapse:collapse;margin:20px 0;background:#edf8f2;border-radius:12px;overflow:hidden}.email-details td{padding:10px 14px;border-bottom:1px solid #d9eee2;font-size:14px;line-height:1.45}.email-details tr:last-child td{border:0}.email-details td:first-child{width:38%;color:#486258;font-weight:700}.email-checklist{margin-top:26px}.email-checklist h3,.email-records h3,.email-travel h3{margin:0 0 14px;color:#17382c;font-size:19px}.email-checklist ol,.email-records ol{margin:0;padding:0;list-style:none}.email-checklist li{display:flex;gap:11px;margin:0 0 12px;padding:13px;background:#f7faf8;border-radius:10px;color:#4d5e56;font-size:14px;line-height:1.5}.email-number{display:inline-block;flex:0 0 25px;width:25px;height:25px;border-radius:50%;background:#0d5d48;color:#fff;font-size:12px;line-height:25px;text-align:center;font-weight:700}.email-records{margin-top:28px;padding:20px;background:#fff8e9;border-radius:12px}.email-records li{margin:0 0 9px;padding-left:22px;position:relative;color:#5d553c;font-size:14px;line-height:1.5}.email-records li:before{content:'✓';position:absolute;left:0;color:#a06609;font-weight:700}.email-travel{margin-top:24px;padding:20px;border:1px solid #d7e8df;border-radius:12px;background:#f6faf8;color:#4d5e56;font-size:14px;line-height:1.55}.email-travel p{margin:9px 0}.email-travel .email-address{padding:12px 14px;border-left:4px solid #0d5d48;background:#edf8f2;border-radius:7px;color:#294b3e}</style></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#17231e;"><div style="max-width:680px;margin:0 auto;padding:28px 16px;"><div style="padding:24px 28px;background:#0d5d48;border-radius:18px 18px 0 0;color:#ffffff;"><div style="font-size:13px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#bce9d7;">Pro Driver Medicals</div><h1 style="margin:8px 0 0;font-size:29px;line-height:1.18;color:#ffffff;">${escapeHtml(title)}</h1></div><div style="padding:28px;background:#ffffff;border-radius:0 0 18px 18px;box-shadow:0 8px 24px rgba(23,35,30,.08);"><p style="margin:0 0 22px;color:#53625b;font-size:16px;line-height:1.6;">${preview}</p>${content}<p style="margin:28px 0 0;padding-top:22px;border-top:1px solid #e2e9e5;color:#53625b;font-size:14px;line-height:1.6;">Need help? Call <a href="tel:07480609640" style="color:#0d5d48;font-weight:700;text-decoration:none;">07480 609640</a>.</p></div></div><style>.email-details{width:100%;border-collapse:collapse;margin:20px 0;background:#edf8f2;border-radius:12px;overflow:hidden}.email-details td{padding:10px 14px;border-bottom:1px solid #d9eee2;font-size:14px;line-height:1.45}.email-details tr:last-child td{border:0}.email-details td:first-child{width:38%;color:#486258;font-weight:700}.email-checklist{margin-top:26px}.email-checklist h3,.email-records h3,.email-travel h3{margin:0 0 14px;color:#17382c;font-size:19px}.email-checklist ol,.email-records ol{margin:0;padding:0;list-style:none}.email-checklist li{display:flex;gap:11px;margin:0 0 12px;padding:13px;background:#f7faf8;border-radius:10px;color:#4d5e56;font-size:14px;line-height:1.5}.email-number{display:inline-block;flex:0 0 25px;width:25px;height:25px;border-radius:50%;background:#0d5d48;color:#fff;font-size:12px;line-height:25px;text-align:center;font-weight:700}.email-records{margin-top:28px;padding:20px;background:#fff8e9;border-radius:12px}.email-records li{margin:0 0 9px;padding-left:22px;position:relative;color:#5d553c;font-size:14px;line-height:1.5}.email-records li:before{content:'✓';position:absolute;left:0;color:#a06609;font-weight:700}.email-travel{margin-top:24px;padding:20px;border:1px solid #d7e8df;border-radius:12px;background:#f6faf8;color:#4d5e56;font-size:14px;line-height:1.55}.email-travel p{margin:9px 0}.email-travel .email-address{padding:12px 14px;border-left:4px solid #0d5d48;background:#edf8f2;border-radius:7px;color:#294b3e}</style></body></html>`;
 }
 
 async function sendAppointmentEmails(appointment) {
@@ -1529,7 +1529,7 @@ async function sendAppointmentEmails(appointment) {
   try {
     await sendBookingEmail({
       to: appointment.email,
-      subject: "Your Motor Medicals Appointment Confirmation",
+      subject: "Your Pro Driver Medicals Appointment Confirmation",
       html: bookingEmailHtml({
         title: "Your appointment is confirmed",
         preview: `Dear ${customerName}, please arrive 10 minutes early for your driver medical.`,
@@ -1591,7 +1591,7 @@ async function confirmPaidAppointment(session) {
 
 app.post("/api/create-booking-checkout", async (req, res) => {
   if (!motorMedicalsStripe) {
-    return res.status(503).json({ error: "Motor Medicals payments are not configured yet" });
+    return res.status(503).json({ error: "Pro Driver Medicals payments are not configured yet" });
   }
   const {
     medicalType, clinic, date, time, firstName, lastName,
@@ -1648,7 +1648,7 @@ app.post("/api/create-booking-checkout", async (req, res) => {
         price_data: {
           currency: "gbp",
           unit_amount: amount,
-          product_data: { name: "Motor Medicals appointment", description }
+          product_data: { name: "Pro Driver Medicals appointment", description }
         },
         quantity: 1
       }],
@@ -1669,7 +1669,7 @@ app.post("/api/create-booking-checkout", async (req, res) => {
 
 app.get("/api/booking-confirmation", async (req, res) => {
   if (!motorMedicalsStripe) {
-    return res.status(503).json({ error: "Motor Medicals payments are not configured yet" });
+    return res.status(503).json({ error: "Pro Driver Medicals payments are not configured yet" });
   }
 
   const sessionId = String(req.query.session_id || "");
@@ -1784,7 +1784,7 @@ app.post("/api/book-appointment", async (req, res) => {
         const customerMsg = {
           to: email,
           from: process.env.GMAIL_USER,
-          subject: "Your Motor Medicals Appointment Confirmation",
+          subject: "Your Pro Driver Medicals Appointment Confirmation",
           html: `
             <h2>Appointment Confirmed</h2>
             <p>Dear ${firstName} ${lastName},</p>
@@ -1796,7 +1796,7 @@ app.post("/api/book-appointment", async (req, res) => {
             ${council ? `<p><strong>Council:</strong> ${council}</p>` : ''}
             <p>Please arrive 10 minutes early and bring any required documents.</p>
             <p>If you need to reschedule, please call us at 07480 609640.</p>
-            <p>Thank you,<br>Motor Medicals Team</p>
+            <p>Thank you,<br>Pro Driver Medicals Team</p>
           `
         };
         
