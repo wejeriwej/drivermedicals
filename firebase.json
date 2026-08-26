@@ -14,6 +14,15 @@
     ],
     "headers": [
       {
+        "source": "**/*.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
         "source": "**/*.{jpg,jpeg,png,gif,webp,avif,svg}",
         "headers": [
           {

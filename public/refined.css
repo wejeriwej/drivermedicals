@@ -113,6 +113,27 @@ footer { background: #031f28; }
 .cards article {
   min-height: 230px;
 }
+.cards h3 a { color: inherit; text-decoration: none; }
+.cards h3 a:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+
+.service-page .hero { min-height: 500px; }
+.service-page .hero-copy { max-width: 650px; }
+.service-page .service-summary { align-self: stretch; display: flex; flex-direction: column; justify-content: center; padding: 36px; border: 1px solid rgba(255,255,255,.82); border-radius: 20px; background: rgba(255,255,255,.88); box-shadow: 0 22px 55px rgba(10,45,44,.12); backdrop-filter: blur(8px); }
+.service-page .service-summary h2 { margin-bottom: 14px; font-size: 1.65rem; letter-spacing: -1px; }
+.service-page .service-summary ul { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.service-page .service-summary li { position: relative; padding-left: 28px; color: var(--muted); font-size: .92rem; }
+.service-page .service-summary li::before { content: '✓'; position: absolute; left: 0; top: 0; color: var(--green); font-weight: 900; }
+.service-content { display: grid; grid-template-columns: 1fr 1fr; gap: 70px; }
+.service-content h2 { font-size: clamp(2rem,3.6vw,3rem); }
+.service-content h3 { margin: 28px 0 8px; font-size: 1.12rem; }
+.service-content p, .service-content li { color: var(--muted); }
+.service-content ul { padding-left: 20px; }
+.service-location { padding: 30px; border-radius: 16px; background: var(--pale); }
+.service-location address { margin: 15px 0; color: var(--ink); font-style: normal; line-height: 1.7; }
+.service-cta { max-width: none!important; padding: 78px max(24px,calc((100% - 950px)/2))!important; text-align: center; background: var(--ink); color: #fff; }
+.service-cta h2 { color: #fff; }
+.service-cta p { max-width: 660px; margin: 0 auto 26px; color: #c6ddd4; }
+@media (max-width: 850px) { .service-content { grid-template-columns: 1fr; gap: 32px; } .service-page .hero { grid-template-columns: 1fr; } }
 
 .booking form {
   border-radius: 8px;
@@ -194,6 +215,8 @@ footer { background: #031f28; }
 
 .booking-phone-help { margin: 28px 0 0; padding: 11px 14px; border: 1px solid #cde6da; border-radius: 9px; background: #eff9f4; color: #31594a; font-size: .78rem; font-style: italic; line-height: 1.45; text-align: center; }
 .booking-phone-help a { color: #075f46; font-weight: 800; text-decoration-thickness: 2px; text-underline-offset: 2px; }
+.booking-error { margin: 0 0 18px; padding: 12px 14px; border: 1px solid #e4a4a4; border-left: 4px solid #b42318; border-radius: 8px; background: #fff1f1; color: #9c1c13; font-size: .82rem; font-weight: 700; line-height: 1.45; }
+.booking-error[hidden] { display: none; }
 .clinic-location-note { margin: 8px 0 18px; padding: 16px 17px; border: 1px solid #c9dce8; border-left: 4px solid #4d7f9b; border-radius: 11px; background: #eef5fa; color: #49606d; font-size: .78rem; line-height: 1.55; }
 .clinic-location-note[hidden] { display: none !important; }
 .clinic-location-note > strong { display: block; margin-bottom: 7px; color: #214b62; font-size: .88rem; }
@@ -232,7 +255,7 @@ footer { background: #031f28; }
 .health-guidance p { margin: 6px 0 0; }
 .health-acknowledgement { display: flex; align-items: flex-start; gap: 10px; margin: 2px 0 0; padding: 15px 16px; border: 1px solid #cde5d9; border-radius: 12px; background: #edf8f2; color: #284d3e; font-size: .9rem; line-height: 1.45; }
 .health-check-modal .button { justify-content: center; width: 100%; margin-top: 3px; }
-@media (max-width: 560px) { .health-check-overlay { padding: 12px; align-items: start; } .health-check-modal { max-height: calc(100vh - 24px); padding: 28px 20px; } .health-check-close { top: 13px; right: 13px; } }
+@media (max-width: 560px) { .health-check-overlay { padding: 8px; align-items: start; } .health-check-modal { max-height: calc(100vh - 16px); padding: 26px 16px 20px; border-radius: 18px; } .health-check-modal h2 { margin-right: 42px; font-size: 1.82rem; line-height: 1.08; } .health-check-intro { margin-bottom: 18px; padding-bottom: 16px; font-size: .9rem; line-height: 1.5; } .health-check-modal form { gap: 11px; } .health-question-card { padding: 18px 14px 14px; border-radius: 12px; box-shadow: inset 0 0 0 1px rgba(9, 72, 53, .04); } .health-question { margin-bottom: 12px; font-size: .92rem; line-height: 1.45; } .health-answer-options { gap: 8px; } .health-answer-options label { min-height: 46px; padding: 10px; border-radius: 10px; font-size: .88rem; } .health-follow-up { gap: 10px; padding: 10px; border-radius: 13px; } .health-guidance { padding: 14px; border-radius: 10px; font-size: .84rem; line-height: 1.48; } .health-acknowledgement { padding: 13px; border-radius: 10px; font-size: .84rem; } .health-check-close { top: 12px; right: 12px; width: 34px; height: 34px; } }
 
 @media (max-width: 700px) {
   .highlights { margin: 24px 16px 0; }

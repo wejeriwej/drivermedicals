@@ -37,7 +37,7 @@ if (clinicSelect) {
   const clinicLocationNote = document.createElement('div');
   clinicLocationNote.className = 'clinic-location-note';
   clinicLocationNote.hidden = true;
-  clinicLocationNote.innerHTML = '<strong>London Clinic – Greenwich</strong><address>Linear House<br>Peyton Place<br>London<br>SE10 8RS</address><p><b>Getting here:</b> Three paid on-street parking spaces are available on Peyton Place, with further parking at Burney Street Car Park. Greenwich Station is a short walk away for DLR and National Rail services. Nearby buses include 129, 177, 199 and 386, plus the N199 night bus.</p>';
+  clinicLocationNote.innerHTML = '<strong>London Clinic – Greenwich</strong><address>Linear House<br>Peyton Place<br>London<br>SE10 8RS</address>';
   clinicSelect.closest('label')?.after(clinicLocationNote);
   clinicSelect.addEventListener('change', () => {
     clinicLocationNote.hidden = !clinicSelect.value;
@@ -91,6 +91,44 @@ const phoneBookingHelp = document.createElement('p');
 phoneBookingHelp.className = 'booking-phone-help';
 phoneBookingHelp.innerHTML = 'Finding it difficult to book an appointment? <a href="tel:07480609640">Call 07480 609640</a> and we will help you book over the phone.';
 form?.querySelector('button[type="submit"]')?.after(phoneBookingHelp);
+
+const bookingError = document.createElement('p');
+bookingError.className = 'booking-error';
+bookingError.hidden = true;
+form?.querySelector('h3')?.after(bookingError);
+
+const bookingFieldErrors = {
+  medicalType: 'Choose a medical type so we can prepare the correct assessment form.',
+  council: 'Choose your licensing authority so we can confirm the records you must bring.',
+  clinic: 'Choose the clinic location before selecting your appointment.',
+  appointmentDate: 'Choose an available Wednesday date before continuing.',
+  appointmentTime: 'Choose an available time for your appointment.',
+  paymentChoice: 'Choose whether you would like to pay the £5 deposit or the full £43 today.',
+  firstName: 'Enter your first name so we know who the appointment is for.',
+  lastName: 'Enter your last name so we can confirm your booking.',
+  email: 'Enter a valid email address so we can send your appointment confirmation.',
+  phone: 'Enter a phone number in case we need to contact you about your appointment.',
+  addressLine1: 'Enter your address so we can include it with your booking details.',
+  city: 'Enter your town or city so your address is complete.',
+  postcode: 'Enter your postcode so your address is complete.'
+};
+
+function showBookingError(message) {
+  bookingError.textContent = message;
+  bookingError.hidden = false;
+  bookingError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+form?.addEventListener('invalid', event => {
+  const field = event.target;
+  const message = bookingFieldErrors[field.name || field.id]
+    || (field.type === 'checkbox' ? 'Please confirm that we may contact you about this booking.' : 'Please complete this required field before continuing.');
+  showBookingError(message);
+}, true);
+
+form?.addEventListener('input', () => {
+  bookingError.hidden = true;
+});
 
 const menu = document.querySelector('.menu');
 const nav = document.querySelector('nav');
@@ -291,7 +329,6 @@ const councils = [
   { name: "Council Not listed - Please Contact Us", popular: false }
 ];
 
-// Show dependent booking fields only after a medical type is selected.
 function updateMedicalTypeFields() {
   if (type.value === 'Taxi / private-hire medical') {
     councilLabel.style.display = 'block';
@@ -303,13 +340,11 @@ function updateMedicalTypeFields() {
     councilSelect.value = '';
   }
 
-  if (type.value) {
-    dateFieldset.style.display = 'block';
-    loadAvailableDates();
-  } else {
-    dateFieldset.style.display = 'none';
+  dateFieldset.style.display = 'block';
+  loadAvailableDates();
+
+  if (!type.value) {
     timeFieldset.style.display = 'none';
-    calendarContainer.innerHTML = '';
     times.innerHTML = '';
     dateField.value = '';
     timeField.value = '';
@@ -323,6 +358,9 @@ councilSelect.onchange = () => {
   councilAvailabilityNote.hidden = Boolean(councilSelect.value);
   updateRecordsWarning();
 };
+
+dateFieldset.style.display = 'block';
+loadAvailableDates();
 
 function recordsRequirement() {
   if (type.value === 'Taxi / private-hire medical') {
@@ -686,7 +724,9 @@ form.onsubmit = async (event) => {
   event.preventDefault();
   
   if (!dateField.value || !timeField.value) {
-    success.textContent = 'Please choose a date and a time.';
+    showBookingError(!dateField.value
+      ? 'Choose an available Wednesday date before continuing.'
+      : 'Choose an available time for your appointment.');
     return;
   }
 

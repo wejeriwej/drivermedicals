@@ -70,7 +70,9 @@ const allowedOrigins = [
   "http://localhost:5501",
   "http://127.0.0.1:5501",
   "https://oscereal-706d4.web.app",
-  "https://pro-driver-medicals-uk.web.app"
+  "https://pro-driver-medicals-uk.web.app",
+  "https://prodrivermedicals.com",
+  "https://www.prodrivermedicals.com"
 ];
 
 app.use(cors({
@@ -1634,7 +1636,7 @@ app.post("/api/create-booking-checkout", async (req, res) => {
       transaction.set(appointmentRef, appointmentData);
     });
 
-    const safeOrigin = process.env.PUBLIC_BASE_URL || "https://oscereal-706d4.web.app";
+    const safeOrigin = process.env.PUBLIC_BASE_URL || "https://prodrivermedicals.com";
     const amount = paymentChoice === "full" ? 4300 : 500;
     const description = paymentChoice === "full"
       ? "Full payment for driver medical"
