@@ -19,10 +19,16 @@ const bookingEmailTransport = process.env.GMAIL_USER && process.env.GMAIL_APP_PA
       }
     })
   : null;
-const bookingAdminEmail = process.env.BOOKING_ADMIN_EMAIL || "prodrivermedicals@outlook.com";
+const bookingAdminEmails = [...new Set([
+  "zak.francillon@gmail.com",
+  "prodrivermedicals@outlook.com",
+  ...(process.env.BOOKING_ADMIN_EMAIL || "").split(",").map(email => email.trim()).filter(Boolean)
+])];
 const bookingSenderEmail = process.env.BREVO_SENDER_EMAIL || process.env.GMAIL_USER;
 
 async function sendBookingEmail({ to, subject, html }) {
+  const recipients = Array.isArray(to) ? to : [to];
+
   if (process.env.BREVO_API_KEY && bookingSenderEmail) {
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
@@ -33,7 +39,7 @@ async function sendBookingEmail({ to, subject, html }) {
       },
       body: JSON.stringify({
         sender: { name: "Pro Driver Medicals", email: bookingSenderEmail },
-        to: [{ email: to }],
+        to: recipients.map(email => ({ email })),
         subject,
         htmlContent: html
       })
@@ -48,7 +54,7 @@ async function sendBookingEmail({ to, subject, html }) {
 
   if (bookingEmailTransport) {
     return bookingEmailTransport.sendMail({
-      to,
+      to: recipients,
       from: process.env.GMAIL_USER,
       subject,
       html
@@ -1569,7 +1575,7 @@ async function sendAppointmentEmails(appointment) {
     });
     try {
       await sendBookingEmail({
-        to: bookingAdminEmail,
+        to: bookingAdminEmails,
         subject: "New paid appointment booking",
         html: bookingEmailHtml({
           title: "New paid appointment",
@@ -1837,7 +1843,7 @@ app.post("/api/book-appointment", async (req, res) => {
         
         // Send notification email to admin
         const adminMsg = {
-          to: bookingAdminEmail,
+          to: bookingAdminEmails,
           from: process.env.GMAIL_USER,
           subject: "New Appointment Booking",
           html: `
