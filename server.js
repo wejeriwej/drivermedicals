@@ -19,7 +19,7 @@ const bookingEmailTransport = process.env.GMAIL_USER && process.env.GMAIL_APP_PA
       }
     })
   : null;
-const bookingAdminEmail = process.env.BOOKING_ADMIN_EMAIL || "zak.francillon@gmail.com";
+const bookingAdminEmail = process.env.BOOKING_ADMIN_EMAIL || "prodrivermedicals@outlook.com";
 const bookingSenderEmail = process.env.BREVO_SENDER_EMAIL || process.env.GMAIL_USER;
 
 async function sendBookingEmail({ to, subject, html }) {
@@ -1301,9 +1301,11 @@ console.log("DELETE route registered: /api/history/:id");
 
 // ---------------- APPOINTMENT BOOKING SYSTEM ---------------- //
 
+const APPOINTMENT_START_DATE = "2026-09-09";
+
 function appointmentTimeSlots() {
   const slots = [];
-  for (let minute = 1110; minute <= 1290; minute += 15) {
+  for (let minute = 1080; minute <= 1320; minute += 20) {
     const hour = Math.floor(minute / 60);
     const minutes = minute % 60;
     slots.push(`${hour - 12}:${String(minutes).padStart(2, "0")}pm`);
@@ -1371,7 +1373,7 @@ function isFutureSlot(date, time, now = londonNow()) {
 
 function isBookableAppointment(date, time) {
   const appointmentDate = dateFromKey(date);
-  if (Number.isNaN(appointmentDate.getTime()) || appointmentDate.getUTCDay() !== 3) return false;
+  if (Number.isNaN(appointmentDate.getTime()) || appointmentDate.getUTCDay() !== 3 || date < APPOINTMENT_START_DATE) return false;
 
   const now = londonNow();
   const lastBookableDate = dateFromKey(now.date);
@@ -1403,8 +1405,11 @@ app.get("/api/available-dates", async (req, res) => {
     while (nextWednesday.getUTCDay() !== 3) {
       nextWednesday.setUTCDate(nextWednesday.getUTCDate() + 1);
     }
+    if (dateKey(nextWednesday) < APPOINTMENT_START_DATE) {
+      nextWednesday = dateFromKey(APPOINTMENT_START_DATE);
+    }
     // After the final clinic slot has begun, start with next week's Wednesday.
-    if (dateKey(nextWednesday) === now.date && now.minutes >= 1290) {
+    if (dateKey(nextWednesday) === now.date && now.minutes >= 1320) {
       nextWednesday.setUTCDate(nextWednesday.getUTCDate() + 7);
     }
     
@@ -1500,26 +1505,49 @@ function getMedicalFormGuidance(appointment) {
   };
 }
 
-function recordsRequestHtml(records) {
-  return `<div class="email-records"><h3>How to request your records from your GP</h3><ol><li>Contact your GP surgery by phone, email or online portal and request: <strong>${escapeHtml(records.level)}</strong>.</li><li>Give your full name, date of birth, address and NHS number if known.</li><li>Ask the surgery to provide the records in time for your appointment; it can take up to 28 days.</li><li>Bring a digital or printed copy with you. Do not rely on NHS App access alone.</li></ol></div>`;
+function gpRequestTemplate(appointment, records) {
+  const authority = appointment.council || appointment.medicalType || "my driver medical";
+  const subject = `Patient request for a copy of my ${records.level.toLowerCase()}`;
+  const body = `Dear GP surgery,\n\nI am a patient at your practice and I am arranging my own driver medical for ${authority} with Pro Driver Medicals.\n\nMy licensing requirements mean I need a copy of my ${records.level}. Please send it to me securely by email or let me know when I can collect a paper copy to take to my appointment.\n\nThis request is from me as the patient. Pro Driver Medicals is not requesting or receiving my records on my behalf.\n\nPlease let me know if you need identification or a consent form from me.\n\nKind regards,\n\n[Your full name]\n[Date of birth]\n[Address]`;
+  return { subject, body, href: `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}` };
+}
+
+function recordsRequestHtml(appointment, records) {
+  const request = gpRequestTemplate(appointment, records);
+  return `<div class="email-records"><h3>How to request your records from your GP</h3><ol><li>Contact your GP surgery by phone, email or online portal and request: <strong>${escapeHtml(records.level)}</strong>.</li><li>Give your full name, date of birth, address and NHS number if known.</li><li>Ask the surgery to provide the records in time for your appointment; it can take up to 28 days.</li><li>Bring a digital or printed copy with you. Do not rely on NHS App access alone.</li></ol><p style="margin:18px 0 0;"><a href="${request.href}" style="display:inline-block;padding:11px 15px;border-radius:7px;background:#0d5d48;color:#fff;font-weight:700;text-decoration:none;">Open email app to request records →</a></p></div>`;
+}
+
+function recordsRequirementHtml(appointment, records) {
+  const request = gpRequestTemplate(appointment, records);
+  return `<div style="margin:22px 0 0;padding:16px;background:#edf8f2;border-left:4px solid #0d5d48;border-radius:8px;line-height:1.55;"><strong>Records required: ${escapeHtml(records.level)}</strong><br>${escapeHtml(records.detail)}<p style="margin:14px 0 0;"><a href="${request.href}" style="display:inline-block;padding:10px 14px;border-radius:7px;background:#0d5d48;color:#fff;font-weight:700;text-decoration:none;">Open email app to request records →</a></p></div>`;
 }
 
 function clinicTravelHtml() {
-  return `<div class="email-travel"><h3>London Clinic – Greenwich</h3><p class="email-address"><strong>Linear House</strong><br>Peyton Place<br>London<br>SE10 8RS</p><p><strong>Parking:</strong> Three paid on-street parking spaces are available on Peyton Place. Further parking is available nearby at Burney Street Car Park; please check signs and current charges.</p><p><strong>Train and DLR:</strong> Greenwich Station is a short walk away, with DLR and National Rail services.</p><p><strong>Bus:</strong> Nearby routes include 129, 177, 199 and 386. The N199 also serves the area at night.</p></div>`;
+  return `<div class="email-travel"><h3>London Clinic – Greenwich</h3><p class="email-address"><strong>Linear House</strong><br>Peyton Place<br>London<br>SE10 8RS</p><p><strong>Parking:</strong> Free on-street parking may be available on some nearby side streets after 5pm. Please check the signs before leaving your vehicle.</p><div class="email-arrival"><img src="https://prodrivermedicals.com/art/clinic-doorbell-email.jpg" alt="Doorbell directly above the Pro Driver Medicals sign" width="240" style="display:block;width:240px;max-width:100%;height:auto;margin:0 auto 14px;border:0;border-radius:8px;outline:none;"><p style="margin:0;"><strong>When you arrive</strong><br>At your appointment time, press the bell directly above the Pro Driver Medicals sign and wait for someone to let you in.</p></div></div>`;
 }
 
 function appointmentChecklistHtml(appointment, records) {
   const medicalForm = getMedicalFormGuidance(appointment);
   const remainingAmount = Number(appointment.remainingAmount || 0);
-  const balanceItem = remainingAmount > 0
-    ? `<li><span class="email-number">7</span><span><strong>Outstanding balance</strong><br>Bring <strong>£${(remainingAmount / 100).toFixed(2)} cash</strong> to pay the remaining balance at the clinic.</span></li>`
-    : "";
+  const item = (number, title, detail) => `<tr><td width="38" valign="top" style="padding:0 12px 0 0;"><span style="display:inline-block;width:26px;height:26px;border-radius:50%;background:#0d5d48;color:#ffffff;font:700 13px/26px Arial,Helvetica,sans-serif;text-align:center;">${number}</span></td><td valign="top" style="color:#4d5e56;font:14px/1.5 Arial,Helvetica,sans-serif;"><strong style="color:#17382c;">${title}</strong><br>${detail}</td></tr>`;
+  const rows = [
+    item(1, "Medical records", escapeHtml(records.level)),
+    item(2, "Photo ID and proof of address", "Passport or driving licence, plus a recent bank statement, utility bill or similar proof of address."),
+    item(3, "Glasses or contact lenses", "Bring those you use for driving."),
+    item(4, "Medication list", "An up-to-date prescription printout or a list of all medicines and doses."),
+    item(5, "Relevant medical evidence", "Bring any relevant clinic letters. If you use insulin or medicines that can cause low blood glucose (hypos), bring your blood glucose meter or continuous glucose monitor and at least six weeks of readings."),
+    item(6, escapeHtml(medicalForm.label), escapeHtml(medicalForm.detail)),
+  ];
 
-  return `<div class="email-checklist"><h3>What to bring to your appointment</h3><ol><li><span class="email-number">1</span><span><strong>Medical records</strong><br>${escapeHtml(records.level)}</span></li><li><span class="email-number">2</span><span><strong>Photo ID and proof of address</strong><br>Passport or driving licence, plus a recent bank statement, utility bill or similar proof of address.</span></li><li><span class="email-number">3</span><span><strong>Glasses or contact lenses</strong><br>Bring those you use for driving.</span></li><li><span class="email-number">4</span><span><strong>Medication list</strong><br>An up-to-date prescription printout or a list of all medicines and doses.</span></li><li><span class="email-number">5</span><span><strong>Relevant medical evidence</strong><br>Bring any relevant clinic letters. If you use insulin or medicines that can cause low blood glucose (hypos), bring your blood glucose meter or continuous glucose monitor and at least six weeks of readings.</span></li><li><span class="email-number">6</span><span><strong>${escapeHtml(medicalForm.label)}</strong><br>${escapeHtml(medicalForm.detail)}</span></li>${balanceItem}</ol></div>`;
+  if (remainingAmount > 0) {
+    rows.push(item(7, "Outstanding balance", `Bring <strong>£${(remainingAmount / 100).toFixed(2)} cash</strong> to pay the remaining balance at the clinic.`));
+  }
+
+  return `<div class="email-checklist"><h3>What to bring to your appointment</h3><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:separate;border-spacing:0 12px;">${rows.join("")}</table></div>`;
 }
 
 function bookingEmailHtml({ title, preview, content }) {
-  return `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#17231e;"><div style="max-width:680px;margin:0 auto;padding:28px 16px;"><div style="padding:24px 28px;background:#0d5d48;border-radius:18px 18px 0 0;color:#ffffff;"><div style="font-size:13px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#bce9d7;">Pro Driver Medicals</div><h1 style="margin:8px 0 0;font-size:29px;line-height:1.18;color:#ffffff;">${escapeHtml(title)}</h1></div><div style="padding:28px;background:#ffffff;border-radius:0 0 18px 18px;box-shadow:0 8px 24px rgba(23,35,30,.08);"><p style="margin:0 0 22px;color:#53625b;font-size:16px;line-height:1.6;">${preview}</p>${content}<p style="margin:28px 0 0;padding-top:22px;border-top:1px solid #e2e9e5;color:#53625b;font-size:14px;line-height:1.6;">Need help? Call <a href="tel:07480609640" style="color:#0d5d48;font-weight:700;text-decoration:none;">07480 609640</a>.</p></div></div><style>.email-details{width:100%;border-collapse:collapse;margin:20px 0;background:#edf8f2;border-radius:12px;overflow:hidden}.email-details td{padding:10px 14px;border-bottom:1px solid #d9eee2;font-size:14px;line-height:1.45}.email-details tr:last-child td{border:0}.email-details td:first-child{width:38%;color:#486258;font-weight:700}.email-checklist{margin-top:26px}.email-checklist h3,.email-records h3,.email-travel h3{margin:0 0 14px;color:#17382c;font-size:19px}.email-checklist ol,.email-records ol{margin:0;padding:0;list-style:none}.email-checklist li{display:flex;gap:11px;margin:0 0 12px;padding:13px;background:#f7faf8;border-radius:10px;color:#4d5e56;font-size:14px;line-height:1.5}.email-number{display:inline-block;flex:0 0 25px;width:25px;height:25px;border-radius:50%;background:#0d5d48;color:#fff;font-size:12px;line-height:25px;text-align:center;font-weight:700}.email-records{margin-top:28px;padding:20px;background:#fff8e9;border-radius:12px}.email-records li{margin:0 0 9px;padding-left:22px;position:relative;color:#5d553c;font-size:14px;line-height:1.5}.email-records li:before{content:'✓';position:absolute;left:0;color:#a06609;font-weight:700}.email-travel{margin-top:24px;padding:20px;border:1px solid #d7e8df;border-radius:12px;background:#f6faf8;color:#4d5e56;font-size:14px;line-height:1.55}.email-travel p{margin:9px 0}.email-travel .email-address{padding:12px 14px;border-left:4px solid #0d5d48;background:#edf8f2;border-radius:7px;color:#294b3e}</style></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#17231e;"><div style="max-width:680px;margin:0 auto;padding:28px 16px;"><div style="padding:24px 28px;background:#0d5d48;border-radius:18px 18px 0 0;color:#ffffff;"><div style="font-size:13px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#bce9d7;">Pro Driver Medicals</div><h1 style="margin:8px 0 0;font-size:29px;line-height:1.18;color:#ffffff;">${escapeHtml(title)}</h1></div><div style="padding:28px;background:#ffffff;border-radius:0 0 18px 18px;box-shadow:0 8px 24px rgba(23,35,30,.08);"><p style="margin:0 0 22px;color:#53625b;font-size:16px;line-height:1.6;">${preview}</p>${content}<p style="margin:28px 0 0;padding-top:22px;border-top:1px solid #e2e9e5;color:#53625b;font-size:14px;line-height:1.6;">Need help? Call <a href="tel:+447965219850" style="color:#0d5d48;font-weight:700;text-decoration:none;">+44 7965219850</a>.</p></div></div><style>.email-details{width:100%;border-collapse:collapse;margin:20px 0;background:#edf8f2;border-radius:12px;overflow:hidden}.email-details td{padding:10px 14px;border-bottom:1px solid #d9eee2;font-size:14px;line-height:1.45}.email-details tr:last-child td{border:0}.email-details td:first-child{width:38%;color:#486258;font-weight:700}.email-checklist{margin-top:26px}.email-checklist h3,.email-records h3,.email-travel h3{margin:0 0 14px;color:#17382c;font-size:19px}.email-checklist ul,.email-records ol{margin:0;padding:0;list-style:none}.email-checklist li{display:flex;gap:11px;margin:0 0 12px;padding:13px;background:#f7faf8;border-radius:10px;color:#4d5e56;font-size:14px;line-height:1.5}.email-number{display:inline-block;flex:0 0 25px;width:25px;height:25px;border-radius:50%;background:#0d5d48;color:#fff;font-size:12px;line-height:25px;text-align:center;font-weight:700}.email-records{margin-top:28px;padding:20px;background:#fff8e9;border-radius:12px}.email-records li{margin:0 0 9px;padding-left:22px;position:relative;color:#5d553c;font-size:14px;line-height:1.5}.email-records li:before{content:'✓';position:absolute;left:0;color:#a06609;font-weight:700}.email-travel{margin-top:24px;padding:20px;border:1px solid #d7e8df;border-radius:12px;background:#f6faf8;color:#4d5e56;font-size:14px;line-height:1.55}.email-travel p{margin:9px 0}.email-travel .email-address{padding:12px 14px;border-left:4px solid #0d5d48;background:#edf8f2;border-radius:7px;color:#294b3e}.email-arrival{margin-top:18px;padding:18px;background:#edf8f2;border:1px solid #d7e8df;border-radius:10px;text-align:center;color:#294b3e}.email-arrival p{margin:0!important;text-align:left}</style></body></html>`;
 }
 
 async function sendAppointmentEmails(appointment) {
@@ -1536,7 +1564,7 @@ async function sendAppointmentEmails(appointment) {
       html: bookingEmailHtml({
         title: "Your appointment is confirmed",
         preview: `Dear ${customerName}, please arrive 10 minutes early for your driver medical.`,
-        content: `${appointmentDetails}${clinicTravelHtml()}<p style="margin:22px 0 0;padding:16px;background:#edf8f2;border-left:4px solid #0d5d48;border-radius:8px;line-height:1.55;"><strong>Records required: ${escapeHtml(records.level)}</strong><br>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(records)}`
+        content: `${appointmentDetails}${clinicTravelHtml()}${recordsRequirementHtml(appointment, records)}${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(appointment, records)}`
       })
     });
     try {
@@ -1798,7 +1826,7 @@ app.post("/api/book-appointment", async (req, res) => {
             <p><strong>Medical Type:</strong> ${medicalType}</p>
             ${council ? `<p><strong>Council:</strong> ${council}</p>` : ''}
             <p>Please arrive 10 minutes early and bring any required documents.</p>
-            <p>If you need to reschedule, please call us at 07480 609640.</p>
+            <p>If you need to reschedule, please call us at +44 7965219850.</p>
             <p>Thank you,<br>Pro Driver Medicals Team</p>
           `
         };
@@ -1809,7 +1837,7 @@ app.post("/api/book-appointment", async (req, res) => {
         
         // Send notification email to admin
         const adminMsg = {
-          to: "zak.francillon@gmail.com",
+          to: bookingAdminEmail,
           from: process.env.GMAIL_USER,
           subject: "New Appointment Booking",
           html: `
