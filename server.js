@@ -31,6 +31,7 @@ async function sendBookingEmail({ to, subject, html }) {
 
   if (process.env.BREVO_API_KEY && bookingSenderEmail) {
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      timeout: 10000,
       method: "POST",
       headers: {
         "api-key": process.env.BREVO_API_KEY,
@@ -392,7 +393,8 @@ app.post(
     if (event.type === "checkout.session.completed" && event.data.object.metadata?.bookingType === "driver-medical") {
       try {
         if (event.data.object.payment_status !== "unpaid") {
-          await confirmPaidAppointment(event.data.object);
+          const emailsSent = await confirmPaidAppointment(event.data.object);
+          if (!emailsSent) return res.status(500).json({ error: "Booking confirmed; email delivery needs retry" });
         }
       } catch (bookingError) {
         console.error("❌ Paid Pro Driver Medicals appointment confirmation failed:", bookingError);
@@ -400,6 +402,17 @@ app.post(
       }
     }
 
+    if (event.type === "checkout.session.expired" && event.data.object.metadata?.bookingType === "driver-medical") {
+      const session = event.data.object;
+      const ref = admin.firestore().collection("appointments").doc(session.metadata.appointmentId);
+      await admin.firestore().runTransaction(async transaction => {
+        const snapshot = await transaction.get(ref);
+        const appointment = snapshot.data();
+        if (appointment?.status === "payment_pending" && appointment.stripeCheckoutSessionId === session.id) {
+          transaction.update(ref, { expiresAt: admin.firestore.Timestamp.fromMillis(0) });
+        }
+      });
+    }
     res.json({ received: true });
   }
 );
@@ -1448,16 +1461,19 @@ app.get("/api/available-slots/:date", async (req, res) => {
     const snapshot = await appointmentsRef.where("date", "==", date).get();
     
     const bookedSlots = new Set();
+    const heldSlots = new Map();
     snapshot.forEach(doc => {
       const data = doc.data();
       if (!appointmentBlocksSlot(data)) return;
       bookedSlots.add(data.time);
+      if (data.status === "payment_pending") heldSlots.set(data.time, data.expiresAt.toMillis());
     });
     
     const now = londonNow();
     const slots = appointmentTimeSlots().map(time => ({
       time,
-      available: isFutureSlot(date, time, now) && !bookedSlots.has(time)
+      available: isFutureSlot(date, time, now) && !bookedSlots.has(time),
+      heldUntil: heldSlots.get(time) || null
     }));
     
     res.json({ slots });
@@ -1556,14 +1572,17 @@ function bookingEmailHtml({ title, preview, content }) {
   return `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#17231e;"><div style="max-width:680px;margin:0 auto;padding:28px 16px;"><div style="padding:24px 28px;background:#0d5d48;border-radius:18px 18px 0 0;color:#ffffff;"><div style="font-size:13px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#bce9d7;">Pro Driver Medicals</div><h1 style="margin:8px 0 0;font-size:29px;line-height:1.18;color:#ffffff;">${escapeHtml(title)}</h1></div><div style="padding:28px;background:#ffffff;border-radius:0 0 18px 18px;box-shadow:0 8px 24px rgba(23,35,30,.08);"><p style="margin:0 0 22px;color:#53625b;font-size:16px;line-height:1.6;">${preview}</p>${content}<p style="margin:28px 0 0;padding-top:22px;border-top:1px solid #e2e9e5;color:#53625b;font-size:14px;line-height:1.6;">Need help? Call <a href="tel:+447480609640" style="color:#0d5d48;font-weight:700;text-decoration:none;">07480 609640</a>.</p></div></div><style>.email-details{width:100%;border-collapse:collapse;margin:20px 0;background:#edf8f2;border-radius:12px;overflow:hidden}.email-details td{padding:10px 14px;border-bottom:1px solid #d9eee2;font-size:14px;line-height:1.45}.email-details tr:last-child td{border:0}.email-details td:first-child{width:38%;color:#486258;font-weight:700}.email-checklist{margin-top:26px}.email-checklist h3,.email-records h3,.email-travel h3{margin:0 0 14px;color:#17382c;font-size:19px}.email-checklist ul,.email-records ol{margin:0;padding:0;list-style:none}.email-checklist li{display:flex;gap:11px;margin:0 0 12px;padding:13px;background:#f7faf8;border-radius:10px;color:#4d5e56;font-size:14px;line-height:1.5}.email-number{display:inline-block;flex:0 0 25px;width:25px;height:25px;border-radius:50%;background:#0d5d48;color:#fff;font-size:12px;line-height:25px;text-align:center;font-weight:700}.email-records{margin-top:28px;padding:20px;background:#fff8e9;border-radius:12px}.email-records li{margin:0 0 9px;padding-left:22px;position:relative;color:#5d553c;font-size:14px;line-height:1.5}.email-records li:before{content:'✓';position:absolute;left:0;color:#a06609;font-weight:700}.email-travel{margin-top:24px;padding:20px;border:1px solid #d7e8df;border-radius:12px;background:#f6faf8;color:#4d5e56;font-size:14px;line-height:1.55}.email-travel p{margin:9px 0}.email-travel .email-address{padding:12px 14px;border-left:4px solid #0d5d48;background:#edf8f2;border-radius:7px;color:#294b3e}.email-arrival{margin-top:18px;padding:18px;background:#edf8f2;border:1px solid #d7e8df;border-radius:10px;text-align:center;color:#294b3e}.email-arrival p{margin:0!important;text-align:left}</style></body></html>`;
 }
 
-async function sendAppointmentEmails(appointment) {
+async function sendAppointmentEmails(appointment, appointmentRef) {
   const paid = `£${(appointment.paidAmount / 100).toFixed(2)}`;
   const remaining = `£${(appointment.remainingAmount / 100).toFixed(2)}`;
   const records = getRecordsGuidance(appointment);
   const customerName = `${escapeHtml(appointment.firstName)} ${escapeHtml(appointment.lastName)}`;
   const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(displayAppointmentDate(appointment.date))}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Location</td><td>${escapeHtml(appointment.clinic)}</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Paid online</td><td>${paid}</td></tr>${appointment.remainingAmount > 0 ? `<tr><td>Remaining balance</td><td>${remaining} cash at the clinic</td></tr>` : ""}</table>`;
   const address = [appointment.addressLine1, appointment.addressLine2, appointment.city, appointment.postcode].filter(Boolean).map(escapeHtml).join(", ");
+  let customerSent = Boolean(appointment.customerConfirmationEmailSent || appointment.confirmationEmailSent);
+  let adminSent = Boolean(appointment.adminConfirmationEmailSent);
   try {
+    if (!customerSent) {
     await sendBookingEmail({
       to: appointment.email,
       subject: "Your Pro Driver Medicals Appointment Confirmation",
@@ -1573,7 +1592,14 @@ async function sendAppointmentEmails(appointment) {
         content: `${appointmentDetails}${clinicTravelHtml()}${recordsRequirementHtml(appointment, records)}${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(appointment, records)}`
       })
     });
-    try {
+      customerSent = true;
+      await appointmentRef.update({ customerConfirmationEmailSent: true });
+    }
+  } catch (emailError) {
+    console.error("Customer appointment email failed:", emailError.message);
+  }
+  try {
+    if (!adminSent) {
       await sendBookingEmail({
         to: bookingAdminEmails,
         subject: "New paid appointment booking",
@@ -1583,17 +1609,26 @@ async function sendAppointmentEmails(appointment) {
           content: `${appointmentDetails}${clinicTravelHtml()}<p style="margin:22px 0 0;padding:16px;background:#edf8f2;border-left:4px solid #0d5d48;border-radius:8px;line-height:1.55;"><strong>Records required: ${escapeHtml(records.level)}</strong><br>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}`
         })
       });
-    } catch (adminEmailError) {
-      console.error("❌ Admin appointment email error:", adminEmailError);
+      adminSent = true;
+      await appointmentRef.update({ adminConfirmationEmailSent: true });
     }
-    return true;
-  } catch (emailError) {
-    console.error("❌ Appointment email error:", emailError);
-    return false;
+  } catch (adminEmailError) {
+    console.error("Admin appointment email failed:", adminEmailError.message);
   }
+  return customerSent && adminSent;
 }
 
+const confirmationTasks = new Map();
 async function confirmPaidAppointment(session) {
+  const id = session.metadata?.appointmentId;
+  if (!id) throw new Error("Stripe session is missing appointmentId");
+  if (confirmationTasks.has(id)) return confirmationTasks.get(id);
+  const task = completePaidAppointment(session).finally(() => confirmationTasks.delete(id));
+  confirmationTasks.set(id, task);
+  return task;
+}
+
+async function completePaidAppointment(session) {
   const appointmentId = session.metadata.appointmentId;
   if (!appointmentId) throw new Error("Stripe session is missing appointmentId");
   const appointmentRef = admin.firestore().collection("appointments").doc(appointmentId);
@@ -1603,6 +1638,9 @@ async function confirmPaidAppointment(session) {
     const snapshot = await transaction.get(appointmentRef);
     if (!snapshot.exists) throw new Error("Appointment reservation not found");
     const appointment = snapshot.data();
+    if (appointment.stripeCheckoutSessionId && appointment.stripeCheckoutSessionId !== session.id) {
+      throw new Error("Payment session does not match the appointment reservation; manual reconciliation required");
+    }
     if (appointment.status === "confirmed") {
       confirmedAppointment = appointment;
       return;
@@ -1620,10 +1658,12 @@ async function confirmPaidAppointment(session) {
     });
   });
 
-  if (confirmedAppointment?.status === "confirmed" && !confirmedAppointment.confirmationEmailSent) {
-    const sent = await sendAppointmentEmails(confirmedAppointment);
+  if (confirmedAppointment?.status === "confirmed" && (!confirmedAppointment.customerConfirmationEmailSent || !confirmedAppointment.adminConfirmationEmailSent)) {
+    const sent = await sendAppointmentEmails(confirmedAppointment, appointmentRef);
     if (sent) await appointmentRef.update({ confirmationEmailSent: true });
+    return sent;
   }
+  return true;
 }
 
 app.post("/api/create-booking-checkout", async (req, res) => {
@@ -1695,7 +1735,7 @@ app.post("/api/create-booking-checkout", async (req, res) => {
     });
 
     await appointmentRef.update({ stripeCheckoutSessionId: session.id });
-    res.json({ url: session.url });
+    res.json({ url: session.url, expiresAt: session.expires_at * 1000 });
   } catch (error) {
     if (error.code === "SLOT_TAKEN") return res.status(409).json({ error: error.message });
     await appointmentRef.delete().catch(() => {});
@@ -1726,6 +1766,7 @@ app.get("/api/booking-confirmation", async (req, res) => {
     const appointment = appointmentSnapshot.data();
     res.json({
       firstName: appointment.firstName,
+      confirmationEmailSent: Boolean(appointment.customerConfirmationEmailSent || appointment.confirmationEmailSent),
       date: displayAppointmentDate(appointment.date),
       time: appointment.time,
       clinic: appointment.clinic,
