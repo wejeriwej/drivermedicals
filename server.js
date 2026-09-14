@@ -29,15 +29,8 @@ const bookingSenderEmail = process.env.BREVO_SENDER_EMAIL || process.env.GMAIL_U
 async function sendBookingEmail({ to, subject, html }) {
   const recipients = Array.isArray(to) ? to : [to];
 
-  if (bookingEmailTransport) {
-    return bookingEmailTransport.sendMail({
-      to: recipients,
-      from: `Pro Driver Medicals <${process.env.GMAIL_USER}>`,
-      subject,
-      html
-    });
-  }
-
+  // Render cannot reliably establish Gmail SMTP connections. Prefer Brevo's
+  // HTTPS API whenever it is configured, then retain Gmail as a fallback.
   if (process.env.BREVO_API_KEY && bookingSenderEmail) {
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       timeout: 10000,
@@ -60,6 +53,15 @@ async function sendBookingEmail({ to, subject, html }) {
       throw new Error(`Brevo email API returned ${response.status}: ${errorBody}`);
     }
     return response.json();
+  }
+
+  if (bookingEmailTransport) {
+    return bookingEmailTransport.sendMail({
+      to: recipients,
+      from: `Pro Driver Medicals <${process.env.GMAIL_USER}>`,
+      subject,
+      html
+    });
   }
 
   throw new Error("No booking email provider is configured");
