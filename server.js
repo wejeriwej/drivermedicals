@@ -1761,10 +1761,23 @@ app.get("/api/booking-confirmation", async (req, res) => {
 
     await confirmPaidAppointment(session);
     const appointmentId = session.metadata.appointmentId;
-    const appointmentSnapshot = await admin.firestore().collection("appointments").doc(appointmentId).get();
+    const appointmentRef = admin.firestore().collection("appointments").doc(appointmentId);
+    // A verified payment session may be deliberately re-sent by support after
+    // fixing a mail-provider issue. This never creates another payment.
+    if (req.query.resend === "1") {
+      await appointmentRef.update({
+        customerConfirmationEmailSent: false,
+        adminConfirmationEmailSent: false,
+        confirmationEmailSent: false
+      });
+    }
+    const appointmentSnapshot = await appointmentRef.get();
     if (!appointmentSnapshot.exists) return res.status(404).json({ error: "Confirmed booking not found" });
 
     const appointment = appointmentSnapshot.data();
+    if (req.query.resend === "1") {
+      await sendAppointmentEmails(appointment, appointmentRef);
+    }
     res.json({
       firstName: appointment.firstName,
       confirmationEmailSent: Boolean(appointment.customerConfirmationEmailSent || appointment.confirmationEmailSent),
