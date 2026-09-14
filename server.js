@@ -1717,7 +1717,6 @@ app.post("/api/create-booking-checkout", async (req, res) => {
       : "£5 deposit; £38 payable at the clinic";
     const session = await motorMedicalsStripe.checkout.sessions.create({
       mode: "payment",
-      payment_method_types: ["card"],
       customer_email: email,
       allow_promotion_codes: true,
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
