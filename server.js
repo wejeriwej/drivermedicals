@@ -1577,9 +1577,13 @@ function bookingEmailHtml({ title, preview, content }) {
 async function sendAppointmentEmails(appointment, appointmentRef) {
   const paid = `£${(appointment.paidAmount / 100).toFixed(2)}`;
   const remaining = `£${(appointment.remainingAmount / 100).toFixed(2)}`;
+  const discount = Number(appointment.discountAmount || 0);
+  const discountRow = discount > 0
+    ? `<tr><td>Promotion discount</td><td>−£${(discount / 100).toFixed(2)}</td></tr>`
+    : "";
   const records = getRecordsGuidance(appointment);
   const customerName = `${escapeHtml(appointment.firstName)} ${escapeHtml(appointment.lastName)}`;
-  const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(displayAppointmentDate(appointment.date))}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Location</td><td>${escapeHtml(appointment.clinic)}</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Paid online</td><td>${paid}</td></tr>${appointment.remainingAmount > 0 ? `<tr><td>Remaining balance</td><td>${remaining} cash at the clinic</td></tr>` : ""}</table>`;
+  const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(displayAppointmentDate(appointment.date))}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Location</td><td>${escapeHtml(appointment.clinic)}</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Appointment price</td><td>£43.00</td></tr>${discountRow}<tr><td>Paid online</td><td>${paid}</td></tr>${appointment.remainingAmount > 0 ? `<tr><td>Remaining balance</td><td>${remaining} cash at the clinic</td></tr>` : ""}</table>`;
   const address = [appointment.addressLine1, appointment.addressLine2, appointment.city, appointment.postcode].filter(Boolean).map(escapeHtml).join(", ");
   let customerSent = Boolean(appointment.customerConfirmationEmailSent || appointment.confirmationEmailSent);
   let adminSent = Boolean(appointment.adminConfirmationEmailSent);
@@ -1648,12 +1652,20 @@ async function completePaidAppointment(session) {
       return;
     }
     const paidAmount = session.amount_total || 0;
-    const remainingAmount = appointment.paymentChoice === "full" ? 0 : 3800;
-    confirmedAppointment = { ...appointment, paidAmount, remainingAmount, status: "confirmed" };
+    // Checkout discounts apply to today's charge. For deposits, carry the 5%
+    // promotion through to the remaining balance so the customer receives 5%
+    // off the complete £43 appointment, not merely 5% off the £5 deposit.
+    const hasPromotion = Number(session.total_details?.amount_discount || 0) > 0;
+    const discountAmount = hasPromotion ? 215 : 0;
+    const remainingAmount = appointment.paymentChoice === "full"
+      ? 0
+      : Math.max(0, 4300 - discountAmount - paidAmount);
+    confirmedAppointment = { ...appointment, paidAmount, remainingAmount, discountAmount, status: "confirmed" };
     transaction.update(appointmentRef, {
       status: "confirmed",
       paidAmount,
       remainingAmount,
+      discountAmount,
       stripeCheckoutSessionId: session.id,
       stripePaymentIntentId: session.payment_intent || null,
       paidAt: admin.firestore.FieldValue.serverTimestamp()
@@ -1788,6 +1800,7 @@ app.get("/api/booking-confirmation", async (req, res) => {
       council: appointment.council,
       paidAmount: appointment.paidAmount,
       remainingAmount: appointment.remainingAmount,
+      discountAmount: appointment.discountAmount || 0,
       records: getRecordsGuidance(appointment),
       medicalForm: getMedicalFormGuidance(appointment)
     });
