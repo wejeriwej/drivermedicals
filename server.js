@@ -1329,7 +1329,7 @@ const BOOKING_PREPAYMENT_REQUIRED = process.env.BOOKING_PREPAYMENT_REQUIRED === 
 
 function appointmentTimeSlots() {
   const slots = [];
-  for (let minute = 540; minute <= 1320; minute += 20) {
+  for (let minute = 540; minute <= 1320; minute += 30) {
     const hour = Math.floor(minute / 60);
     const minutes = minute % 60;
     const suffix = hour >= 12 ? "pm" : "am";

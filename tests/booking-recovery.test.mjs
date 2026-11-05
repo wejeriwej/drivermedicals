@@ -48,13 +48,15 @@ test('unpaid holds expire without releasing confirmed bookings', () => {
   assert.equal(context.appointmentBlocksSlot({ status: 'confirmed' }), true);
 });
 
-test('appointment slots run every 20 minutes from 9am through 10pm', () => {
+test('appointment slots run every 30 minutes from 9am through 10pm', () => {
   const code = source.slice(source.indexOf('function appointmentTimeSlots('), source.indexOf('function dateKey('));
   const context = vm.createContext({});
   vm.runInContext(code, context);
   const slots = [...context.appointmentTimeSlots()];
-  assert.equal(slots.length, 40);
+  assert.equal(slots.length, 27);
   assert.equal(slots[0], '9:00am');
+  assert.equal(slots[1], '9:30am');
+  assert.equal(slots[2], '10:00am');
   assert.equal(slots.at(-1), '10:00pm');
 });
 
