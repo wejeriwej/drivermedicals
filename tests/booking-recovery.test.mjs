@@ -47,3 +47,35 @@ test('unpaid holds expire without releasing confirmed bookings', () => {
   assert.equal(context.appointmentBlocksSlot({ status: 'payment_pending', expiresAt: { toMillis: () => Date.now() + 60000 } }), true);
   assert.equal(context.appointmentBlocksSlot({ status: 'confirmed' }), true);
 });
+
+test('appointment slots run every 20 minutes from 9am through 10pm', () => {
+  const code = source.slice(source.indexOf('function appointmentTimeSlots('), source.indexOf('function dateKey('));
+  const context = vm.createContext({});
+  vm.runInContext(code, context);
+  const slots = [...context.appointmentTimeSlots()];
+  assert.equal(slots.length, 40);
+  assert.equal(slots[0], '9:00am');
+  assert.equal(slots.at(-1), '10:00pm');
+});
+
+test('bookable appointments are no longer restricted to Wednesdays', () => {
+  const code = source.slice(source.indexOf('function appointmentTimeSlots('), source.indexOf('// Get available dates for the calendar'));
+  const context = vm.createContext({ Date, Intl, APPOINTMENT_START_DATE: '2026-09-09' });
+  vm.runInContext(code, context);
+  const tomorrow = new Date();
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const date = `${tomorrow.getUTCFullYear()}-${String(tomorrow.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrow.getUTCDate()).padStart(2, '0')}`;
+  assert.equal(context.isBookableAppointment(date, '9:00am'), true);
+});
+
+test('same-day appointments are rejected and availability starts tomorrow', () => {
+  const code = source.slice(source.indexOf('function appointmentTimeSlots('), source.indexOf('// Get available dates for the calendar'));
+  const context = vm.createContext({ Date, Intl, APPOINTMENT_START_DATE: '2026-09-09' });
+  vm.runInContext(code, context);
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  const today = `${values.year}-${values.month}-${values.day}`;
+  assert.equal(context.isBookableAppointment(today, '10:00pm'), false);
+});

@@ -1323,13 +1323,18 @@ console.log("DELETE route registered: /api/history/:id");
 // ---------------- APPOINTMENT BOOKING SYSTEM ---------------- //
 
 const APPOINTMENT_START_DATE = "2026-09-09";
+// Keep the Stripe pre-payment implementation available for a future return to
+// deposits/full payment. Set BOOKING_PREPAYMENT_REQUIRED=true to re-enable it.
+const BOOKING_PREPAYMENT_REQUIRED = process.env.BOOKING_PREPAYMENT_REQUIRED === "true";
 
 function appointmentTimeSlots() {
   const slots = [];
-  for (let minute = 1080; minute <= 1320; minute += 20) {
+  for (let minute = 540; minute <= 1320; minute += 20) {
     const hour = Math.floor(minute / 60);
     const minutes = minute % 60;
-    slots.push(`${hour - 12}:${String(minutes).padStart(2, "0")}pm`);
+    const suffix = hour >= 12 ? "pm" : "am";
+    const displayHour = hour % 12 || 12;
+    slots.push(`${displayHour}:${String(minutes).padStart(2, "0")}${suffix}`);
   }
   return slots;
 }
@@ -1394,13 +1399,15 @@ function isFutureSlot(date, time, now = londonNow()) {
 
 function isBookableAppointment(date, time) {
   const appointmentDate = dateFromKey(date);
-  if (Number.isNaN(appointmentDate.getTime()) || appointmentDate.getUTCDay() !== 3 || date < APPOINTMENT_START_DATE) return false;
+  if (Number.isNaN(appointmentDate.getTime()) || date < APPOINTMENT_START_DATE) return false;
 
   const now = londonNow();
+  const firstBookableDate = dateFromKey(now.date);
+  firstBookableDate.setUTCDate(firstBookableDate.getUTCDate() + 1);
   const lastBookableDate = dateFromKey(now.date);
   lastBookableDate.setUTCDate(lastBookableDate.getUTCDate() + 56);
 
-  return date <= dateKey(lastBookableDate) && appointmentTimeSlots().includes(time) && isFutureSlot(date, time, now);
+  return date >= dateKey(firstBookableDate) && date <= dateKey(lastBookableDate) && appointmentTimeSlots().includes(time);
 }
 
 // Get available dates for the calendar
@@ -1419,24 +1426,16 @@ app.get("/api/available-dates", async (req, res) => {
       bookedSlotsByDate.set(data.date, bookedSlots);
     });
     
-    // Generate the next 8 Wednesday clinics.
+    // Generate daily availability for the next 8 weeks.
     const dates = [];
     const now = londonNow();
-    let nextWednesday = dateFromKey(now.date);
-    while (nextWednesday.getUTCDay() !== 3) {
-      nextWednesday.setUTCDate(nextWednesday.getUTCDate() + 1);
-    }
-    if (dateKey(nextWednesday) < APPOINTMENT_START_DATE) {
-      nextWednesday = dateFromKey(APPOINTMENT_START_DATE);
-    }
-    // After the final clinic slot has begun, start with next week's Wednesday.
-    if (dateKey(nextWednesday) === now.date && now.minutes >= 1320) {
-      nextWednesday.setUTCDate(nextWednesday.getUTCDate() + 7);
-    }
+    let firstDay = dateFromKey(now.date);
+    firstDay.setUTCDate(firstDay.getUTCDate() + 1);
+    if (dateKey(firstDay) < APPOINTMENT_START_DATE) firstDay = dateFromKey(APPOINTMENT_START_DATE);
     
-    for (let i = 0; i < 8; i++) {
-      const day = new Date(nextWednesday);
-      day.setUTCDate(day.getUTCDate() + i * 7);
+    for (let i = 0; i < 56; i++) {
+      const day = new Date(firstDay);
+      day.setUTCDate(day.getUTCDate() + i);
       const dateStr = dateKey(day);
       const futureSlots = appointmentTimeSlots().filter(time => isFutureSlot(dateStr, time, now));
       const bookedSlots = bookedSlotsByDate.get(dateStr) || new Set();
@@ -1547,7 +1546,7 @@ function recordsRequirementHtml(appointment, records) {
 }
 
 function clinicTravelHtml() {
-  return `<div class="email-travel"><h3>London Clinic – Greenwich</h3><p class="email-address"><strong>Linear House</strong><br>Peyton Place<br>London<br>SE10 8RS</p><p><strong>Parking:</strong> Free on-street parking may be available on some nearby side streets after 5pm. Please check the signs before leaving your vehicle.</p><div class="email-arrival"><img src="https://prodrivermedicals.com/art/clinic-doorbell-email.jpg" alt="Doorbell directly above the Pro Driver Medicals sign" width="240" style="display:block;width:240px;max-width:100%;height:auto;margin:0 auto 14px;border:0;border-radius:8px;outline:none;"><p style="margin:0;"><strong>When you arrive</strong><br>At your appointment time, press the bell directly above the Pro Driver Medicals sign and wait for someone to let you in.</p></div></div>`;
+  return `<div class="email-travel"><h3>London Clinic – Greenwich</h3><p class="email-address"><strong>5 Peyton Place</strong><br>SE10 8RS</p><p><strong>Parking:</strong> Free on-street parking may be available on some nearby side streets after 5pm. Please check the signs before leaving your vehicle.</p><div class="email-arrival"><p style="margin:0;"><strong>When you arrive</strong><br>At your appointment time, press the bell directly above the Pro Driver Medicals sign and wait for someone to let you in.</p></div></div>`;
 }
 
 function appointmentChecklistHtml(appointment, records) {
@@ -1583,8 +1582,12 @@ async function sendAppointmentEmails(appointment, appointmentRef) {
     : "";
   const records = getRecordsGuidance(appointment);
   const customerName = `${escapeHtml(appointment.firstName)} ${escapeHtml(appointment.lastName)}`;
-  const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(displayAppointmentDate(appointment.date))}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Location</td><td>${escapeHtml(appointment.clinic)}</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Appointment price</td><td>£43.00</td></tr>${discountRow}<tr><td>Paid online</td><td>${paid}</td></tr>${appointment.remainingAmount > 0 ? `<tr><td>Remaining balance</td><td>${remaining} at the clinic</td></tr>` : ""}</table>`;
+  const paymentRows = Number(appointment.paidAmount || 0) > 0
+    ? `<tr><td>Paid online</td><td>${paid}</td></tr>${appointment.remainingAmount > 0 ? `<tr><td>Remaining balance</td><td>${remaining} at the clinic</td></tr>` : ""}`
+    : `<tr><td>Payment</td><td>No pre-payment required; £43.00 payable at the clinic</td></tr>`;
+  const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(displayAppointmentDate(appointment.date))}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Location</td><td>5 Peyton Place, SE10 8RS</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Appointment price</td><td>£43.00</td></tr>${discountRow}${paymentRows}</table>`;
   const address = [appointment.addressLine1, appointment.addressLine2, appointment.city, appointment.postcode].filter(Boolean).map(escapeHtml).join(", ");
+  const addressLine = address ? `<br>${address}` : "";
   let customerSent = Boolean(appointment.customerConfirmationEmailSent || appointment.confirmationEmailSent);
   let adminSent = Boolean(appointment.adminConfirmationEmailSent);
   try {
@@ -1608,10 +1611,10 @@ async function sendAppointmentEmails(appointment, appointmentRef) {
     if (!adminSent) {
       await sendBookingEmail({
         to: bookingAdminEmails,
-        subject: "New paid appointment booking",
+        subject: Number(appointment.paidAmount || 0) > 0 ? "New paid appointment booking" : "New appointment booking – pay at clinic",
         html: bookingEmailHtml({
-          title: "New paid appointment",
-          preview: `<strong>${customerName}</strong><br>${escapeHtml(appointment.email)} · ${escapeHtml(appointment.phone)}<br>${address}`,
+          title: Number(appointment.paidAmount || 0) > 0 ? "New paid appointment" : "New appointment",
+          preview: `<strong>${customerName}</strong><br>${escapeHtml(appointment.email)} · ${escapeHtml(appointment.phone)}${addressLine}`,
           content: `${appointmentDetails}${clinicTravelHtml()}<p style="margin:22px 0 0;padding:16px;background:#edf8f2;border-left:4px solid #0d5d48;border-radius:8px;line-height:1.55;"><strong>Records required: ${escapeHtml(records.level)}</strong><br>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}`
         })
       });
@@ -1681,6 +1684,9 @@ async function completePaidAppointment(session) {
 }
 
 app.post("/api/create-booking-checkout", async (req, res) => {
+  if (!BOOKING_PREPAYMENT_REQUIRED) {
+    return res.status(409).json({ error: "Pre-payment is currently disabled. Please book without payment." });
+  }
   if (!motorMedicalsStripe) {
     return res.status(503).json({ error: "Pro Driver Medicals payments are not configured yet" });
   }
@@ -1689,11 +1695,11 @@ app.post("/api/create-booking-checkout", async (req, res) => {
     email, phone, addressLine1, addressLine2, city, postcode, council, paymentChoice
   } = req.body;
 
-  if (!medicalType || !clinic || !date || !time || !firstName || !lastName || !email || !phone || !addressLine1 || !city || !postcode) {
+  if (!medicalType || !clinic || !date || !time || !firstName || !lastName || !email || !phone) {
     return res.status(400).json({ error: "Please complete every required booking field" });
   }
   if (!isBookableAppointment(date, time)) {
-    return res.status(400).json({ error: "Please choose an available Wednesday appointment slot" });
+    return res.status(400).json({ error: "Please choose an available appointment slot" });
   }
   if (!['deposit', 'full'].includes(paymentChoice)) {
     return res.status(400).json({ error: "Choose whether to pay the £5 deposit or the full £43" });
@@ -1703,7 +1709,8 @@ app.post("/api/create-booking-checkout", async (req, res) => {
   const appointmentRef = admin.firestore().collection("appointments").doc(appointmentId);
   const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 31 * 60 * 1000);
   const appointmentData = {
-    medicalType, clinic, date, time, firstName, lastName, email, phone, addressLine1, addressLine2: addressLine2 || null, city, postcode,
+    medicalType, clinic, date, time, firstName, lastName, email, phone,
+    addressLine1: addressLine1 || null, addressLine2: addressLine2 || null, city: city || null, postcode: postcode || null,
     council: council || null,
     paymentChoice,
     status: "payment_pending",
@@ -1810,10 +1817,12 @@ app.get("/api/booking-confirmation", async (req, res) => {
   }
 });
 
-// Legacy direct-booking route retained for older clients; payment is now required.
+// Direct booking is the active flow while pre-payment is disabled. The Stripe
+// route above remains intact so payments can be restored with one setting.
 app.post("/api/book-appointment", async (req, res) => {
-  return res.status(410).json({ error: "Online payment is now required. Please restart your booking." });
-  /*
+  if (BOOKING_PREPAYMENT_REQUIRED) {
+    return res.status(409).json({ error: "Online payment is required. Please continue to secure checkout." });
+  }
   try {
     console.log("📥 Booking request received:", req.body);
     
@@ -1826,18 +1835,21 @@ app.post("/api/book-appointment", async (req, res) => {
       lastName,
       email,
       phone,
+      addressLine1,
+      addressLine2,
+      city,
       postcode,
       council
     } = req.body;
     
-    if (!date || !time || !email || !firstName || !lastName || !clinic || !phone || !postcode) {
+    if (!date || !time || !email || !firstName || !lastName || !clinic || !phone) {
       console.error("❌ Missing required fields:", { date, time, email, firstName, lastName, clinic, phone, postcode });
       return res.status(400).json({ error: "Missing required fields" });
     }
 
     if (!isBookableAppointment(date, time)) {
       console.error("❌ Invalid appointment slot:", { date, time });
-      return res.status(400).json({ error: "Please choose an available Wednesday appointment slot" });
+      return res.status(400).json({ error: "Please choose an available appointment slot" });
     }
     
     console.log("✅ Validation passed, proceeding with booking");
@@ -1853,8 +1865,15 @@ app.post("/api/book-appointment", async (req, res) => {
       lastName,
       email,
       phone,
-      postcode,
+      addressLine1: addressLine1 || null,
+      addressLine2: addressLine2 || null,
+      city: city || null,
+      postcode: postcode || null,
       council: council || null,
+      paymentChoice: "pay_later",
+      paidAmount: 0,
+      remainingAmount: 4300,
+      discountAmount: 0,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       status: "confirmed"
     };
@@ -1878,74 +1897,21 @@ app.post("/api/book-appointment", async (req, res) => {
       throw bookingError;
     }
     
-    // Send confirmation email to the customer (if Gmail SMTP is configured)
-    let confirmationEmailSent = false;
-    console.log("📧 Email transport configured:", !!bookingEmailTransport);
-    console.log("📧 GMAIL_USER set:", !!process.env.GMAIL_USER);
-    console.log("📧 GMAIL_APP_PASSWORD set:", !!process.env.GMAIL_APP_PASSWORD);
+    const confirmationEmailSent = await sendAppointmentEmails(appointmentData, appointmentRef);
+    if (confirmationEmailSent) await appointmentRef.update({ confirmationEmailSent: true });
     
-    if (bookingEmailTransport) {
-      try {
-        const customerMsg = {
-          to: email,
-          from: process.env.GMAIL_USER,
-          subject: "Your Pro Driver Medicals Appointment Confirmation",
-          html: `
-            <h2>Appointment Confirmed</h2>
-            <p>Dear ${firstName} ${lastName},</p>
-            <p>Your appointment has been successfully booked for:</p>
-            <p><strong>Date:</strong> ${date}</p>
-            <p><strong>Time:</strong> ${time}</p>
-            <p><strong>Location:</strong> ${clinic}</p>
-            <p><strong>Medical Type:</strong> ${medicalType}</p>
-            ${council ? `<p><strong>Council:</strong> ${council}</p>` : ''}
-            <p>Please arrive 10 minutes early and bring any required documents.</p>
-            <p>If you need to reschedule, please call us at 07501762582.</p>
-            <p>Thank you,<br>Pro Driver Medicals Team</p>
-          `
-        };
-        
-        console.log("📧 Sending customer email to:", email);
-        await bookingEmailTransport.sendMail(customerMsg);
-        console.log("✅ Customer email sent");
-        
-        // Send notification email to admin
-        const adminMsg = {
-          to: bookingAdminEmails,
-          from: process.env.GMAIL_USER,
-          subject: "New Appointment Booking",
-          html: `
-            <h2>New Appointment Booked</h2>
-            <p><strong>Name:</strong> ${firstName} ${lastName}</p>
-            <p><strong>Email:</strong> ${email}</p>
-            <p><strong>Phone:</strong> ${phone}</p>
-            <p><strong>Postcode:</strong> ${postcode}</p>
-            <p><strong>Date:</strong> ${date}</p>
-            <p><strong>Time:</strong> ${time}</p>
-            <p><strong>Medical Type:</strong> ${medicalType}</p>
-            <p><strong>Location:</strong> ${clinic}</p>
-            ${council ? `<p><strong>Council:</strong> ${council}</p>` : ''}
-          `
-        };
-        
-        console.log("📧 Sending admin email");
-        await bookingEmailTransport.sendMail(adminMsg);
-        console.log("✅ Admin email sent");
-        confirmationEmailSent = true;
-      } catch (emailError) {
-        console.error("❌ Error sending emails:", emailError);
-        // Continue with booking even if email fails
+    res.json({
+      success: true,
+      confirmationEmailSent,
+      message: "Appointment booked successfully. No pre-payment is required; pay £43 at the clinic.",
+      booking: {
+        date: displayAppointmentDate(date), time, clinic, medicalType, council: council || null
       }
-    } else {
-      console.warn("⚠️ Email transport not configured - skipping emails");
-    }
-    
-    res.json({ success: true, confirmationEmailSent, message: "Appointment booked successfully" });
+    });
   } catch (err) {
     console.error("Error booking appointment:", err);
     res.status(500).json({ error: "Failed to book appointment" });
   }
-  */
 });
 
 //Is to ping render when user accesses main page/index.html so that it wakes up render. Frontend JS is inside index.html btw
