@@ -13,7 +13,7 @@ function emailHarness(failRecipient) {
     console: { error() {} }, bookingAdminEmails: ['admin@example.com'],
     sendBookingEmail: async ({ to }) => { calls.push(to); if (to === failRecipient || (Array.isArray(to) && failRecipient === 'admin')) throw new Error('Provider unavailable'); },
     escapeHtml: value => String(value || ''), displayAppointmentDate: () => '',
-    getRecordsGuidance: () => ({}), bookingEmailHtml: () => '', clinicTravelHtml: () => '',
+    getRecordsGuidance: () => ({}), bookingEmailHtml: () => '', parkingNoticeHtml: () => '',
     recordsRequirementHtml: () => '', appointmentChecklistHtml: () => '', recordsRequestHtml: () => ''
   });
   vm.runInContext(emailCode, context);

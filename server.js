@@ -6,6 +6,7 @@ import "dotenv/config";
 import admin from "firebase-admin";
 import Stripe from "stripe";
 import nodemailer from "nodemailer";
+import { randomBytes } from "node:crypto";
 
 import WebSocket from "ws";
 import expressWs from "express-ws";
@@ -1518,13 +1519,13 @@ function getMedicalFormGuidance(appointment) {
   if (medicalType.includes("hgv") || medicalType.includes("lgv") || medicalType.includes("bus") || medicalType.includes("coach")) {
     return {
       label: "Your DVLA D4 medical form",
-      detail: "Bring a printed DVLA D4 medical examination report form for your Group 2 licence application or renewal."
+      detail: "Bring a printed DVLA D4 form. Fill in your details in the grey box on the left-hand side, and write your name and date of birth at the bottom of every page in black ink."
     };
   }
 
   return {
     label: "Your council medical form",
-    detail: "Download the correct taxi or private-hire form from your licensing authority and bring it with you."
+    detail: "Bring the correct printed form. Fill in your details in the grey box on the left-hand side, and write your name and date of birth at the bottom of every page in black ink."
   };
 }
 
@@ -1542,29 +1543,24 @@ function recordsRequestHtml(appointment, records) {
 
 function recordsRequirementHtml(appointment, records) {
   const request = gpRequestTemplate(appointment, records);
-  return `<div style="margin:22px 0 0;padding:16px;background:#edf8f2;border-left:4px solid #0d5d48;border-radius:8px;line-height:1.55;"><strong>Records required: ${escapeHtml(records.level)}</strong><br>${escapeHtml(records.detail)}<p style="margin:14px 0 0;"><a href="${request.href}" style="display:inline-block;padding:10px 14px;border-radius:7px;background:#0d5d48;color:#fff;font-weight:700;text-decoration:none;">Open email app to request records →</a></p></div>`;
+  return `<div style="margin:24px 0;padding:22px;border:4px solid #c74412;border-radius:12px;background:#fff0e8;color:#682006;line-height:1.55;text-align:center;"><div style="font-size:13px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;color:#a72f08;">Important — do not miss this</div><div style="margin-top:6px;font-size:23px;font-weight:900;line-height:1.2;">RECORDS REQUIRED: ${escapeHtml(records.level).toUpperCase()}</div><p style="margin:10px 0 0;font-size:15px;font-weight:700;">${escapeHtml(records.detail)}</p><p style="margin:16px 0 0;"><a href="${request.href}" style="display:inline-block;padding:11px 16px;border-radius:7px;background:#a72f08;color:#fff;font-weight:800;text-decoration:none;">Open email app to request records →</a></p></div>`;
 }
 
-function clinicTravelHtml() {
-  return `<div class="email-travel"><h3>London Clinic – Greenwich</h3><p class="email-address"><strong>5 Peyton Place</strong><br>SE10 8RS</p><p><strong>Parking:</strong> Free on-street parking may be available on some nearby side streets after 5pm. Please check the signs before leaving your vehicle.</p><div class="email-arrival"><p style="margin:0;"><strong>When you arrive</strong><br>At your appointment time, press the bell directly above the Pro Driver Medicals sign and wait for someone to let you in.</p></div></div>`;
+function parkingNoticeHtml() {
+  return `<div class="email-travel" style="margin-top:28px;"><h3>Parking information</h3><p><strong>Parking:</strong> Free on-street parking may be available on some nearby side streets after 5pm. Please check the signs before leaving your vehicle.</p></div>`;
 }
 
 function appointmentChecklistHtml(appointment, records) {
   const medicalForm = getMedicalFormGuidance(appointment);
-  const remainingAmount = Number(appointment.remainingAmount || 0);
   const item = (number, title, detail) => `<tr><td width="38" valign="top" style="padding:0 12px 0 0;"><span style="display:inline-block;width:26px;height:26px;border-radius:50%;background:#0d5d48;color:#ffffff;font:700 13px/26px Arial,Helvetica,sans-serif;text-align:center;">${number}</span></td><td valign="top" style="color:#4d5e56;font:14px/1.5 Arial,Helvetica,sans-serif;"><strong style="color:#17382c;">${title}</strong><br>${detail}</td></tr>`;
   const rows = [
     item(1, "Medical records", escapeHtml(records.level)),
-    item(2, "Photo ID and proof of address", "Passport or driving licence, plus a recent bank statement, utility bill or similar proof of address."),
+    item(2, "Form of ID", "Bring a passport or driving licence."),
     item(3, "Glasses or contact lenses", "Bring those you use for driving."),
     item(4, "Medication list", "An up-to-date prescription printout or a list of all medicines and doses."),
     item(5, "Relevant medical evidence", "Bring any relevant clinic letters. If you use insulin or medicines that can cause low blood glucose (hypos), bring your blood glucose meter or continuous glucose monitor and at least six weeks of readings."),
     item(6, escapeHtml(medicalForm.label), escapeHtml(medicalForm.detail)),
   ];
-
-  if (remainingAmount > 0) {
-    rows.push(item(7, "Outstanding balance", `Bring <strong>£${(remainingAmount / 100).toFixed(2)} cash</strong> to pay the remaining balance at the clinic.`));
-  }
 
   return `<div class="email-checklist"><h3>What to bring to your appointment</h3><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:separate;border-spacing:0 12px;">${rows.join("")}</table></div>`;
 }
@@ -1574,18 +1570,13 @@ function bookingEmailHtml({ title, preview, content }) {
 }
 
 async function sendAppointmentEmails(appointment, appointmentRef) {
-  const paid = `£${(appointment.paidAmount / 100).toFixed(2)}`;
-  const remaining = `£${(appointment.remainingAmount / 100).toFixed(2)}`;
   const discount = Number(appointment.discountAmount || 0);
   const discountRow = discount > 0
     ? `<tr><td>Promotion discount</td><td>−£${(discount / 100).toFixed(2)}</td></tr>`
     : "";
   const records = getRecordsGuidance(appointment);
   const customerName = `${escapeHtml(appointment.firstName)} ${escapeHtml(appointment.lastName)}`;
-  const paymentRows = Number(appointment.paidAmount || 0) > 0
-    ? `<tr><td>Paid online</td><td>${paid}</td></tr>${appointment.remainingAmount > 0 ? `<tr><td>Remaining balance</td><td>${remaining} at the clinic</td></tr>` : ""}`
-    : `<tr><td>Payment</td><td>No pre-payment required; £43.00 payable at the clinic</td></tr>`;
-  const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(displayAppointmentDate(appointment.date))}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Location</td><td>5 Peyton Place, SE10 8RS</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Appointment price</td><td>£43.00</td></tr>${discountRow}${paymentRows}</table>`;
+  const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(displayAppointmentDate(appointment.date))}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Clinic location</td><td>5 Peyton Place, SE10 8RS</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Appointment price</td><td>£43.00</td></tr>${discountRow}</table>`;
   const address = [appointment.addressLine1, appointment.addressLine2, appointment.city, appointment.postcode].filter(Boolean).map(escapeHtml).join(", ");
   const addressLine = address ? `<br>${address}` : "";
   let customerSent = Boolean(appointment.customerConfirmationEmailSent || appointment.confirmationEmailSent);
@@ -1598,7 +1589,7 @@ async function sendAppointmentEmails(appointment, appointmentRef) {
       html: bookingEmailHtml({
         title: "Your appointment is confirmed",
         preview: `Dear ${customerName}, please arrive 10 minutes early for your driver medical.`,
-        content: `${appointmentDetails}${clinicTravelHtml()}${recordsRequirementHtml(appointment, records)}${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(appointment, records)}`
+        content: `${appointmentDetails}${recordsRequirementHtml(appointment, records)}${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(appointment, records)}${parkingNoticeHtml()}`
       })
     });
       customerSent = true;
@@ -1615,7 +1606,7 @@ async function sendAppointmentEmails(appointment, appointmentRef) {
         html: bookingEmailHtml({
           title: Number(appointment.paidAmount || 0) > 0 ? "New paid appointment" : "New appointment",
           preview: `<strong>${customerName}</strong><br>${escapeHtml(appointment.email)} · ${escapeHtml(appointment.phone)}${addressLine}`,
-          content: `${appointmentDetails}${clinicTravelHtml()}<p style="margin:22px 0 0;padding:16px;background:#edf8f2;border-left:4px solid #0d5d48;border-radius:8px;line-height:1.55;"><strong>Records required: ${escapeHtml(records.level)}</strong><br>${escapeHtml(records.detail)}</p>${appointmentChecklistHtml(appointment, records)}`
+          content: `${appointmentDetails}${recordsRequirementHtml(appointment, records)}${appointmentChecklistHtml(appointment, records)}${parkingNoticeHtml()}`
         })
       });
       adminSent = true;
@@ -1817,6 +1808,41 @@ app.get("/api/booking-confirmation", async (req, res) => {
   }
 });
 
+app.get("/api/direct-booking-confirmation", async (req, res) => {
+  const confirmationToken = String(req.query.confirmation_token || "");
+  if (!/^[a-f0-9]{48}$/.test(confirmationToken)) {
+    return res.status(400).json({ error: "Missing or invalid booking confirmation" });
+  }
+
+  try {
+    const snapshot = await admin.firestore().collection("appointments")
+      .where("confirmationToken", "==", confirmationToken)
+      .limit(1)
+      .get();
+    if (snapshot.empty) return res.status(404).json({ error: "Confirmed booking not found" });
+    const appointment = snapshot.docs[0].data();
+    if (appointment.status !== "confirmed") return res.status(404).json({ error: "Confirmed booking not found" });
+
+    res.json({
+      firstName: appointment.firstName,
+      confirmationEmailSent: Boolean(appointment.customerConfirmationEmailSent || appointment.confirmationEmailSent),
+      date: displayAppointmentDate(appointment.date),
+      time: appointment.time,
+      clinic: appointment.clinic,
+      medicalType: appointment.medicalType,
+      council: appointment.council,
+      paidAmount: appointment.paidAmount || 0,
+      remainingAmount: 0,
+      discountAmount: appointment.discountAmount || 0,
+      records: getRecordsGuidance(appointment),
+      medicalForm: getMedicalFormGuidance(appointment)
+    });
+  } catch (error) {
+    console.error("Direct booking confirmation lookup error:", error);
+    res.status(500).json({ error: "Unable to load your booking confirmation" });
+  }
+});
+
 // Direct booking is the active flow while pre-payment is disabled. The Stripe
 // route above remains intact so payments can be restored with one setting.
 app.post("/api/book-appointment", async (req, res) => {
@@ -1856,6 +1882,7 @@ app.post("/api/book-appointment", async (req, res) => {
     
     const db = admin.firestore();
     
+    const confirmationToken = randomBytes(24).toString("hex");
     const appointmentData = {
       medicalType,
       clinic,
@@ -1874,6 +1901,7 @@ app.post("/api/book-appointment", async (req, res) => {
       paidAmount: 0,
       remainingAmount: 4300,
       discountAmount: 0,
+      confirmationToken,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       status: "confirmed"
     };
@@ -1903,7 +1931,8 @@ app.post("/api/book-appointment", async (req, res) => {
     res.json({
       success: true,
       confirmationEmailSent,
-      message: "Appointment booked successfully. No pre-payment is required; pay £43 at the clinic.",
+      confirmationToken,
+      message: "Appointment booked successfully.",
       booking: {
         date: displayAppointmentDate(date), time, clinic, medicalType, council: council || null
       }
