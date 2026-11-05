@@ -1503,7 +1503,7 @@ function getRecordsGuidance(appointment) {
   if (needsFullRecords) {
     return {
       level: "Full GP medical records",
-      detail: "Bring a digital or printed copy; NHS App access on its own is not enough."
+      detail: "Bring a digital or printed copy."
     };
   }
 
@@ -1538,7 +1538,7 @@ function gpRequestTemplate(appointment, records) {
 
 function recordsRequestHtml(appointment, records) {
   const request = gpRequestTemplate(appointment, records);
-  return `<div class="email-records"><h3>How to request your records from your GP</h3><ol><li>Contact your GP surgery by phone, email or online portal and request: <strong>${escapeHtml(records.level)}</strong>.</li><li>Give your full name, date of birth, address and NHS number if known.</li><li>Ask the surgery to provide the records in time for your appointment; it can take up to 28 days.</li><li>Bring a digital or printed copy with you. Do not rely on NHS App access alone.</li></ol><p style="margin:18px 0 0;"><a href="${request.href}" style="display:inline-block;padding:11px 15px;border-radius:7px;background:#0d5d48;color:#fff;font-weight:700;text-decoration:none;">Open email app to request records →</a></p></div>`;
+  return `<div class="email-records"><h3>How to request your records from your GP</h3><ol><li>Contact your GP surgery by phone, email or online portal and request: <strong>${escapeHtml(records.level)}</strong>.</li><li>Give your full name, date of birth, address and NHS number if known.</li><li>Ask the surgery to provide the records in time for your appointment; it can take up to 28 days.</li><li>Bring a digital or printed copy with you.</li></ol><p style="margin:18px 0 0;"><a href="${request.href}" style="display:inline-block;padding:11px 15px;border-radius:7px;background:#0d5d48;color:#fff;font-weight:700;text-decoration:none;">Open email app to request records →</a></p></div>`;
 }
 
 function recordsRequirementHtml(appointment, records) {
