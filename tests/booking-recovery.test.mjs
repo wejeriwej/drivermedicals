@@ -70,14 +70,52 @@ test('bookable appointments are no longer restricted to Wednesdays', () => {
   assert.equal(context.isBookableAppointment(date, '9:00am'), true);
 });
 
-test('same-day appointments are rejected and availability starts tomorrow', () => {
+test('same-day evening bookings close at 2pm London time', () => {
   const code = source.slice(source.indexOf('function appointmentTimeSlots('), source.indexOf('// Get available dates for the calendar'));
-  const context = vm.createContext({ Date, Intl, APPOINTMENT_START_DATE: '2026-09-09' });
+  const bookingAt = instant => {
+    class ClockDate extends Date {
+      constructor(...args) { super(...(args.length ? args : [instant])); }
+      static now() { return new Date(instant).getTime(); }
+    }
+    const context = vm.createContext({ Date: ClockDate, Intl, APPOINTMENT_START_DATE: '2026-09-09' });
+    vm.runInContext(code, context);
+    return context.isBookableAppointment;
+  };
+  const beforeCutoff = bookingAt('2026-11-05T13:59:00Z');
+  assert.equal(beforeCutoff('2026-11-05', '5:00pm'), false);
+  assert.equal(beforeCutoff('2026-11-05', '5:30pm'), true);
+  assert.equal(beforeCutoff('2026-11-05', '10:00pm'), true);
+  assert.equal(beforeCutoff('2026-11-06', '9:00am'), true);
+
+  const atCutoff = bookingAt('2026-11-05T14:00:00Z');
+  assert.equal(atCutoff('2026-11-05', '5:30pm'), false);
+  assert.equal(atCutoff('2026-11-06', '9:00am'), true);
+
+  // British Summer Time is UTC+1, so the cutoff is 13:00 UTC in July.
+  assert.equal(bookingAt('2027-07-01T12:59:00Z')('2027-07-01', '5:30pm'), true);
+  assert.equal(bookingAt('2027-07-01T13:00:00Z')('2027-07-01', '5:30pm'), false);
+});
+
+test('the instant calendar follows the same-day cutoff and evening slot rules', () => {
+  const clientSource = readFileSync(new URL('../public/added.js', import.meta.url), 'utf8');
+  const code = clientSource.slice(clientSource.indexOf('function fallbackDates()'), clientSource.indexOf('let dateAvailabilityRequest'));
+  const context = vm.createContext({
+    Date,
+    APPOINTMENT_START_DATE: '2026-09-09',
+    londonNow: () => ({ date: '2026-11-05', minutes: 13 * 60 + 59 }),
+    dateFromKey: value => new Date(`${value}T12:00:00Z`),
+    dateKey: value => value.toISOString().slice(0, 10),
+    calendarDateLabel: value => value,
+    slotMinutes: time => {
+      const [, hour, minute, period] = /^(\d+):(\d+)(am|pm)$/.exec(time);
+      return Number(hour) % 12 * 60 + Number(minute) + (period === 'pm' ? 720 : 0);
+    }
+  });
   vm.runInContext(code, context);
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit'
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  const today = `${values.year}-${values.month}-${values.day}`;
-  assert.equal(context.isBookableAppointment(today, '10:00pm'), false);
+  assert.equal(context.fallbackDates()[0].date, '2026-11-05');
+  assert.equal(context.fallbackSlots('2026-11-05').find(slot => slot.time === '5:00pm').available, false);
+  assert.equal(context.fallbackSlots('2026-11-05').find(slot => slot.time === '5:30pm').available, true);
+  context.londonNow = () => ({ date: '2026-11-05', minutes: 14 * 60 });
+  assert.equal(context.fallbackDates()[0].date, '2026-11-06');
+  assert.equal(context.fallbackSlots('2026-11-05').find(slot => slot.time === '5:30pm').available, false);
 });

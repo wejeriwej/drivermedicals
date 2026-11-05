@@ -1395,7 +1395,9 @@ function timeSlotMinutes(time) {
 }
 
 function isFutureSlot(date, time, now = londonNow()) {
-  return date > now.date || (date === now.date && timeSlotMinutes(time) > now.minutes);
+  if (date > now.date) return true;
+  // Same-day bookings close at 2pm London time and only evening slots qualify.
+  return date === now.date && now.minutes < 14 * 60 && timeSlotMinutes(time) > 17 * 60 && timeSlotMinutes(time) > now.minutes;
 }
 
 function isBookableAppointment(date, time) {
@@ -1404,15 +1406,16 @@ function isBookableAppointment(date, time) {
 
   const now = londonNow();
   const firstBookableDate = dateFromKey(now.date);
-  firstBookableDate.setUTCDate(firstBookableDate.getUTCDate() + 1);
+  if (now.minutes >= 14 * 60) firstBookableDate.setUTCDate(firstBookableDate.getUTCDate() + 1);
   const lastBookableDate = dateFromKey(now.date);
   lastBookableDate.setUTCDate(lastBookableDate.getUTCDate() + 56);
 
-  return date >= dateKey(firstBookableDate) && date <= dateKey(lastBookableDate) && appointmentTimeSlots().includes(time);
+  return date >= dateKey(firstBookableDate) && date <= dateKey(lastBookableDate) && appointmentTimeSlots().includes(time) && isFutureSlot(date, time, now);
 }
 
 // Get available dates for the calendar
 app.get("/api/available-dates", async (req, res) => {
+  res.set("X-Booking-Rules-Version", "same-day-evening-20261105");
   try {
     const db = admin.firestore();
     const appointmentsRef = db.collection("appointments");
@@ -1431,7 +1434,7 @@ app.get("/api/available-dates", async (req, res) => {
     const dates = [];
     const now = londonNow();
     let firstDay = dateFromKey(now.date);
-    firstDay.setUTCDate(firstDay.getUTCDate() + 1);
+    if (now.minutes >= 14 * 60) firstDay.setUTCDate(firstDay.getUTCDate() + 1);
     if (dateKey(firstDay) < APPOINTMENT_START_DATE) firstDay = dateFromKey(APPOINTMENT_START_DATE);
     
     for (let i = 0; i < 56; i++) {
@@ -1471,10 +1474,9 @@ app.get("/api/available-slots/:date", async (req, res) => {
       if (data.status === "payment_pending") heldSlots.set(data.time, data.expiresAt.toMillis());
     });
     
-    const now = londonNow();
     const slots = appointmentTimeSlots().map(time => ({
       time,
-      available: isFutureSlot(date, time, now) && !bookedSlots.has(time),
+      available: isBookableAppointment(date, time) && !bookedSlots.has(time),
       heldUntil: heldSlots.get(time) || null
     }));
     
