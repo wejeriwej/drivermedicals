@@ -1588,7 +1588,7 @@ async function sendAppointmentEmails(appointment, appointmentRef) {
       subject: "Your Pro Driver Medicals Appointment Confirmation",
       html: bookingEmailHtml({
         title: "Your appointment is confirmed",
-        preview: `Dear ${customerName}, please arrive 10 minutes early for your driver medical.`,
+        preview: `Dear ${customerName}, your driver medical appointment is confirmed.`,
         content: `${appointmentDetails}${recordsRequirementHtml(appointment, records)}${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(appointment, records)}${parkingNoticeHtml()}`
       })
     });
