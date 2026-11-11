@@ -1578,7 +1578,7 @@ async function sendAppointmentEmails(appointment, appointmentRef) {
     : "";
   const records = getRecordsGuidance(appointment);
   const customerName = `${escapeHtml(appointment.firstName)} ${escapeHtml(appointment.lastName)}`;
-  const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(displayAppointmentDate(appointment.date))}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Clinic location</td><td>5 Peyton Place, SE10 8RS</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Appointment price</td><td>£43.00</td></tr>${discountRow}</table>`;
+  const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(displayAppointmentDate(appointment.date))}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Clinic location</td><td>5 Peyton Place, SE10 8RS</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Appointment price</td><td>£49.00</td></tr>${discountRow}</table>`;
   const address = [appointment.addressLine1, appointment.addressLine2, appointment.city, appointment.postcode].filter(Boolean).map(escapeHtml).join(", ");
   const addressLine = address ? `<br>${address}` : "";
   let customerSent = Boolean(appointment.customerConfirmationEmailSent || appointment.confirmationEmailSent);
@@ -1650,12 +1650,12 @@ async function completePaidAppointment(session) {
     const paidAmount = session.amount_total || 0;
     // Checkout discounts apply to today's charge. For deposits, carry the 5%
     // promotion through to the remaining balance so the customer receives 5%
-    // off the complete £43 appointment, not merely 5% off the £5 deposit.
+    // off the complete £49 appointment, not merely 5% off the £5 deposit.
     const hasPromotion = Number(session.total_details?.amount_discount || 0) > 0;
-    const discountAmount = hasPromotion ? 215 : 0;
+    const discountAmount = hasPromotion ? 245 : 0;
     const remainingAmount = appointment.paymentChoice === "full"
       ? 0
-      : Math.max(0, 4300 - discountAmount - paidAmount);
+      : Math.max(0, 4900 - discountAmount - paidAmount);
     confirmedAppointment = { ...appointment, paidAmount, remainingAmount, discountAmount, status: "confirmed" };
     transaction.update(appointmentRef, {
       status: "confirmed",
@@ -1695,7 +1695,7 @@ app.post("/api/create-booking-checkout", async (req, res) => {
     return res.status(400).json({ error: "Please choose an available appointment slot" });
   }
   if (!['deposit', 'full'].includes(paymentChoice)) {
-    return res.status(400).json({ error: "Choose whether to pay the £5 deposit or the full £43" });
+    return res.status(400).json({ error: "Choose whether to pay the £5 deposit or the full £49" });
   }
 
   const appointmentId = `${date}_${time.replace(/[^0-9apm]/gi, "")}`;
@@ -1708,7 +1708,7 @@ app.post("/api/create-booking-checkout", async (req, res) => {
     paymentChoice,
     status: "payment_pending",
     paidAmount: 0,
-    remainingAmount: paymentChoice === "full" ? 0 : 3800,
+    remainingAmount: paymentChoice === "full" ? 0 : 4400,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     expiresAt
   };
@@ -1725,10 +1725,10 @@ app.post("/api/create-booking-checkout", async (req, res) => {
     });
 
     const safeOrigin = process.env.PUBLIC_BASE_URL || "https://prodrivermedicals.com";
-    const amount = paymentChoice === "full" ? 4300 : 500;
+    const amount = paymentChoice === "full" ? 4900 : 500;
     const description = paymentChoice === "full"
       ? "Full payment for driver medical"
-      : "£5 deposit; £38 payable at the clinic";
+      : "£5 deposit; £44 payable at the clinic";
     const session = await motorMedicalsStripe.checkout.sessions.create({
       mode: "payment",
       customer_email: email,
@@ -1901,7 +1901,7 @@ app.post("/api/book-appointment", async (req, res) => {
       council: council || null,
       paymentChoice: "pay_later",
       paidAmount: 0,
-      remainingAmount: 4300,
+      remainingAmount: 4900,
       discountAmount: 0,
       confirmationToken,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
