@@ -1340,6 +1340,49 @@ function appointmentTimeSlots() {
   return slots;
 }
 
+const CLINIC_AVAILABILITY_CONFIG = "clinicAvailability";
+const CLINIC_AVAILABILITY_DOC = "calendar";
+
+function isDateKey(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
+function normaliseAvailabilityConfig(input = {}) {
+  const validSlots = new Set(appointmentTimeSlots());
+  const closedDates = [...new Set((Array.isArray(input.closedDates) ? input.closedDates : [])
+    .filter(isDateKey))].slice(0, 366);
+  const overrides = {};
+  const sourceOverrides = input.overrides && typeof input.overrides === "object" ? input.overrides : {};
+
+  Object.entries(sourceOverrides).slice(0, 366).forEach(([date, value]) => {
+    if (!isDateKey(date) || !value || typeof value !== "object") return;
+    const slots = [...new Set((Array.isArray(value.slots) ? value.slots : [])
+      .filter(slot => validSlots.has(slot)))];
+    if (value.closed === true || slots.length) overrides[date] = { closed: value.closed === true, slots };
+  });
+
+  return { closedDates, overrides };
+}
+
+async function getClinicAvailabilityConfig() {
+  const snapshot = await admin.firestore().collection(CLINIC_AVAILABILITY_CONFIG).doc(CLINIC_AVAILABILITY_DOC).get();
+  return normaliseAvailabilityConfig(snapshot.exists ? snapshot.data() : {});
+}
+
+function slotsForDate(date, availability) {
+  if (availability.closedDates.includes(date)) return [];
+  const override = availability.overrides[date];
+  if (override?.closed) return [];
+  return override?.slots?.length ? override.slots : appointmentTimeSlots();
+}
+
+function requireClinicAvailabilityAdmin(req, res, next) {
+  const configuredPassword = process.env.CLINIC_AVAILABILITY_PASSWORD;
+  if (!configuredPassword) return res.status(503).json({ error: "Clinic availability dashboard is awaiting password setup" });
+  if (req.get("x-clinic-admin-password") !== configuredPassword) return res.status(401).json({ error: "Incorrect dashboard password" });
+  next();
+}
+
 function dateKey(date) {
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -1400,7 +1443,7 @@ function isFutureSlot(date, time, now = londonNow()) {
   return date === now.date && now.minutes < 14 * 60 && timeSlotMinutes(time) > 17 * 60 && timeSlotMinutes(time) > now.minutes;
 }
 
-function isBookableAppointment(date, time) {
+function isBookableAppointment(date, time, availability) {
   const appointmentDate = dateFromKey(date);
   if (Number.isNaN(appointmentDate.getTime()) || date < APPOINTMENT_START_DATE) return false;
 
@@ -1410,8 +1453,31 @@ function isBookableAppointment(date, time) {
   const lastBookableDate = dateFromKey(now.date);
   lastBookableDate.setUTCDate(lastBookableDate.getUTCDate() + 56);
 
-  return date >= dateKey(firstBookableDate) && date <= dateKey(lastBookableDate) && appointmentTimeSlots().includes(time) && isFutureSlot(date, time, now);
+  return date >= dateKey(firstBookableDate) && date <= dateKey(lastBookableDate) && slotsForDate(date, availability).includes(time) && isFutureSlot(date, time, now);
 }
+
+app.get("/api/admin/clinic-availability", requireClinicAvailabilityAdmin, async (req, res) => {
+  try {
+    res.json(await getClinicAvailabilityConfig());
+  } catch (err) {
+    console.error("Error reading clinic availability:", err);
+    res.status(500).json({ error: "Unable to load clinic availability" });
+  }
+});
+
+app.put("/api/admin/clinic-availability", requireClinicAvailabilityAdmin, async (req, res) => {
+  try {
+    const config = normaliseAvailabilityConfig(req.body || {});
+    await admin.firestore().collection(CLINIC_AVAILABILITY_CONFIG).doc(CLINIC_AVAILABILITY_DOC).set({
+      ...config,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    res.json(config);
+  } catch (err) {
+    console.error("Error saving clinic availability:", err);
+    res.status(500).json({ error: "Unable to save clinic availability" });
+  }
+});
 
 // Get available dates for the calendar
 app.get("/api/available-dates", async (req, res) => {
@@ -1419,6 +1485,7 @@ app.get("/api/available-dates", async (req, res) => {
   try {
     const db = admin.firestore();
     const appointmentsRef = db.collection("appointments");
+    const availability = await getClinicAvailabilityConfig();
     const snapshot = await appointmentsRef.get();
     
     const bookedSlotsByDate = new Map();
@@ -1441,7 +1508,7 @@ app.get("/api/available-dates", async (req, res) => {
       const day = new Date(firstDay);
       day.setUTCDate(day.getUTCDate() + i);
       const dateStr = dateKey(day);
-      const futureSlots = appointmentTimeSlots().filter(time => isFutureSlot(dateStr, time, now));
+      const futureSlots = slotsForDate(dateStr, availability).filter(time => isFutureSlot(dateStr, time, now));
       const bookedSlots = bookedSlotsByDate.get(dateStr) || new Set();
       dates.push({
         date: dateStr,
@@ -1463,6 +1530,7 @@ app.get("/api/available-slots/:date", async (req, res) => {
     const { date } = req.params;
     const db = admin.firestore();
     const appointmentsRef = db.collection("appointments");
+    const availability = await getClinicAvailabilityConfig();
     const snapshot = await appointmentsRef.where("date", "==", date).get();
     
     const bookedSlots = new Set();
@@ -1476,7 +1544,7 @@ app.get("/api/available-slots/:date", async (req, res) => {
     
     const slots = appointmentTimeSlots().map(time => ({
       time,
-      available: isBookableAppointment(date, time) && !bookedSlots.has(time),
+      available: isBookableAppointment(date, time, availability) && !bookedSlots.has(time),
       heldUntil: heldSlots.get(time) || null
     }));
     
@@ -1691,7 +1759,8 @@ app.post("/api/create-booking-checkout", async (req, res) => {
   if (!medicalType || !clinic || !date || !time || !firstName || !lastName || !email || !phone) {
     return res.status(400).json({ error: "Please complete every required booking field" });
   }
-  if (!isBookableAppointment(date, time)) {
+  const availability = await getClinicAvailabilityConfig();
+  if (!isBookableAppointment(date, time, availability)) {
     return res.status(400).json({ error: "Please choose an available appointment slot" });
   }
   if (!['deposit', 'full'].includes(paymentChoice)) {
@@ -1875,7 +1944,8 @@ app.post("/api/book-appointment", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    if (!isBookableAppointment(date, time)) {
+    const availability = await getClinicAvailabilityConfig();
+    if (!isBookableAppointment(date, time, availability)) {
       console.error("❌ Invalid appointment slot:", { date, time });
       return res.status(400).json({ error: "Please choose an available appointment slot" });
     }
