@@ -1342,12 +1342,24 @@ function appointmentTimeSlots() {
 
 const CLINIC_AVAILABILITY_CONFIG = "clinicAvailability";
 const CLINIC_AVAILABILITY_DOC = "calendar";
+const CLINICS = {
+  greenwich: { id: "greenwich", name: "London Clinic – Greenwich, Peyton Place SE10 8RS", address: "5 Peyton Place, Greenwich, London SE10 8RS" },
+  leicester: { id: "leicester", name: "Leicester Clinic – 12 Castle View, LE1 5WH", address: "12 Castle View, Leicester LE1 5WH" }
+};
+
+function clinicId(value) {
+  return String(value || "").toLowerCase().includes("leicester") ? "leicester" : "greenwich";
+}
+
+function clinicDetails(value) {
+  return CLINICS[clinicId(value)];
+}
 
 function isDateKey(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 }
 
-function normaliseAvailabilityConfig(input = {}) {
+function normaliseSingleAvailability(input = {}) {
   const validSlots = new Set(appointmentTimeSlots());
   const closedDates = [...new Set((Array.isArray(input.closedDates) ? input.closedDates : [])
     .filter(isDateKey))].slice(0, 366);
@@ -1364,16 +1376,40 @@ function normaliseAvailabilityConfig(input = {}) {
   return { closedDates, overrides };
 }
 
+function normaliseAvailabilityConfig(input = {}) {
+  const source = input.clinics && typeof input.clinics === "object" ? input.clinics : {};
+  // Keep the Greenwich calendar intact when upgrading the original single-clinic setup.
+  return {
+    clinics: {
+      greenwich: normaliseSingleAvailability(source.greenwich || input),
+      leicester: normaliseSingleAvailability(source.leicester || {})
+    }
+  };
+}
+
 async function getClinicAvailabilityConfig() {
   const snapshot = await admin.firestore().collection(CLINIC_AVAILABILITY_CONFIG).doc(CLINIC_AVAILABILITY_DOC).get();
   return normaliseAvailabilityConfig(snapshot.exists ? snapshot.data() : {});
 }
 
-function slotsForDate(date, availability) {
-  if (availability.closedDates.includes(date)) return [];
-  const override = availability.overrides[date];
+function defaultSlotsForClinic(date, selectedClinic) {
+  if (selectedClinic === "leicester") {
+    // Monday, 11:00am–7:00pm inclusive, in 30-minute appointment starts.
+    if (dateFromKey(date).getUTCDay() !== 1) return [];
+    return appointmentTimeSlots().filter(slot => {
+      const minutes = timeSlotMinutes(slot);
+      return minutes >= 11 * 60 && minutes <= 19 * 60;
+    });
+  }
+  return appointmentTimeSlots();
+}
+
+function slotsForDate(date, availability, selectedClinic = "greenwich") {
+  const clinicAvailability = availability.clinics?.[selectedClinic] || normaliseSingleAvailability();
+  if (clinicAvailability.closedDates.includes(date)) return [];
+  const override = clinicAvailability.overrides[date];
   if (override?.closed) return [];
-  return override?.slots?.length ? override.slots : appointmentTimeSlots();
+  return override?.slots?.length ? override.slots : defaultSlotsForClinic(date, selectedClinic);
 }
 
 function requireClinicAvailabilityAdmin(req, res, next) {
@@ -1443,7 +1479,7 @@ function isFutureSlot(date, time, now = londonNow()) {
   return date === now.date && now.minutes < 14 * 60 && timeSlotMinutes(time) > 17 * 60 && timeSlotMinutes(time) > now.minutes;
 }
 
-function isBookableAppointment(date, time, availability) {
+function isBookableAppointment(date, time, availability, selectedClinic = "greenwich") {
   const appointmentDate = dateFromKey(date);
   if (Number.isNaN(appointmentDate.getTime()) || date < APPOINTMENT_START_DATE) return false;
 
@@ -1453,7 +1489,7 @@ function isBookableAppointment(date, time, availability) {
   const lastBookableDate = dateFromKey(now.date);
   lastBookableDate.setUTCDate(lastBookableDate.getUTCDate() + 56);
 
-  return date >= dateKey(firstBookableDate) && date <= dateKey(lastBookableDate) && slotsForDate(date, availability).includes(time) && isFutureSlot(date, time, now);
+  return date >= dateKey(firstBookableDate) && date <= dateKey(lastBookableDate) && slotsForDate(date, availability, selectedClinic).includes(time) && isFutureSlot(date, time, now);
 }
 
 app.get("/api/admin/clinic-availability", requireClinicAvailabilityAdmin, async (req, res) => {
@@ -1486,12 +1522,14 @@ app.get("/api/available-dates", async (req, res) => {
     const db = admin.firestore();
     const appointmentsRef = db.collection("appointments");
     const availability = await getClinicAvailabilityConfig();
+    const selectedClinic = clinicId(req.query.clinic);
     const snapshot = await appointmentsRef.get();
     
     const bookedSlotsByDate = new Map();
     snapshot.forEach(doc => {
       const data = doc.data();
       if (!appointmentBlocksSlot(data)) return;
+      if (clinicId(data.clinic) !== selectedClinic) return;
       const bookedSlots = bookedSlotsByDate.get(data.date) || new Set();
       bookedSlots.add(data.time);
       bookedSlotsByDate.set(data.date, bookedSlots);
@@ -1508,7 +1546,7 @@ app.get("/api/available-dates", async (req, res) => {
       const day = new Date(firstDay);
       day.setUTCDate(day.getUTCDate() + i);
       const dateStr = dateKey(day);
-      const futureSlots = slotsForDate(dateStr, availability).filter(time => isFutureSlot(dateStr, time, now));
+      const futureSlots = slotsForDate(dateStr, availability, selectedClinic).filter(time => isFutureSlot(dateStr, time, now));
       const bookedSlots = bookedSlotsByDate.get(dateStr) || new Set();
       dates.push({
         date: dateStr,
@@ -1531,20 +1569,21 @@ app.get("/api/available-slots/:date", async (req, res) => {
     const db = admin.firestore();
     const appointmentsRef = db.collection("appointments");
     const availability = await getClinicAvailabilityConfig();
+    const selectedClinic = clinicId(req.query.clinic);
     const snapshot = await appointmentsRef.where("date", "==", date).get();
     
     const bookedSlots = new Set();
     const heldSlots = new Map();
     snapshot.forEach(doc => {
       const data = doc.data();
-      if (!appointmentBlocksSlot(data)) return;
+      if (!appointmentBlocksSlot(data) || clinicId(data.clinic) !== selectedClinic) return;
       bookedSlots.add(data.time);
       if (data.status === "payment_pending") heldSlots.set(data.time, data.expiresAt.toMillis());
     });
     
     const slots = appointmentTimeSlots().map(time => ({
       time,
-      available: isBookableAppointment(date, time, availability) && !bookedSlots.has(time),
+      available: isBookableAppointment(date, time, availability, selectedClinic) && !bookedSlots.has(time),
       heldUntil: heldSlots.get(time) || null
     }));
     
@@ -1616,7 +1655,10 @@ function recordsRequirementHtml(appointment, records) {
   return `<div style="margin:24px 0;padding:22px;border:4px solid #c74412;border-radius:12px;background:#fff0e8;color:#682006;line-height:1.55;text-align:center;"><div style="font-size:13px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;color:#a72f08;">Important — do not miss this</div><div style="margin-top:6px;font-size:23px;font-weight:900;line-height:1.2;">RECORDS REQUIRED: ${escapeHtml(records.level).toUpperCase()}</div><p style="margin:10px 0 0;font-size:15px;font-weight:700;">${escapeHtml(records.detail)}</p><p style="margin:16px 0 0;"><a href="${request.href}" style="display:inline-block;padding:11px 16px;border-radius:7px;background:#a72f08;color:#fff;font-weight:800;text-decoration:none;">Open email app to request records →</a></p></div>`;
 }
 
-function parkingNoticeHtml() {
+function parkingNoticeHtml(appointment) {
+  if (clinicId(appointment.clinic) === "leicester") {
+    return `<div class="email-travel" style="margin-top:28px;"><h3>Clinic address</h3><p class="email-address"><strong>Leicester Clinic</strong><br>12 Castle View, Leicester LE1 5WH</p><p>Please allow time to find the clinic and check local parking restrictions before leaving your vehicle.</p></div>`;
+  }
   return `<div class="email-travel" style="margin-top:28px;"><h3>Parking information</h3><p><strong>Parking:</strong> Free on-street parking may be available on some nearby side streets after 5pm. Please check the signs before leaving your vehicle.</p></div>`;
 }
 
@@ -1646,7 +1688,8 @@ async function sendAppointmentEmails(appointment, appointmentRef) {
     : "";
   const records = getRecordsGuidance(appointment);
   const customerName = `${escapeHtml(appointment.firstName)} ${escapeHtml(appointment.lastName)}`;
-  const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(displayAppointmentDate(appointment.date))}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Clinic location</td><td>5 Peyton Place, SE10 8RS</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Appointment price</td><td>£49.00</td></tr>${discountRow}</table>`;
+  const clinic = clinicDetails(appointment.clinic);
+  const appointmentDetails = `<table class="email-details" role="presentation"><tr><td>Date</td><td>${escapeHtml(displayAppointmentDate(appointment.date))}</td></tr><tr><td>Time</td><td>${escapeHtml(appointment.time)}</td></tr><tr><td>Clinic location</td><td>${escapeHtml(clinic.address)}</td></tr><tr><td>Medical type</td><td>${escapeHtml(appointment.medicalType)}</td></tr>${appointment.council ? `<tr><td>Licensing authority</td><td>${escapeHtml(appointment.council)}</td></tr>` : ""}<tr><td>Appointment price</td><td>£49.00</td></tr>${discountRow}</table>`;
   const address = [appointment.addressLine1, appointment.addressLine2, appointment.city, appointment.postcode].filter(Boolean).map(escapeHtml).join(", ");
   const addressLine = address ? `<br>${address}` : "";
   let customerSent = Boolean(appointment.customerConfirmationEmailSent || appointment.confirmationEmailSent);
@@ -1659,7 +1702,7 @@ async function sendAppointmentEmails(appointment, appointmentRef) {
       html: bookingEmailHtml({
         title: "Your appointment is confirmed",
         preview: `Dear ${customerName}, your driver medical appointment is confirmed.`,
-        content: `${appointmentDetails}${recordsRequirementHtml(appointment, records)}${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(appointment, records)}${parkingNoticeHtml()}`
+        content: `${appointmentDetails}${recordsRequirementHtml(appointment, records)}${appointmentChecklistHtml(appointment, records)}${recordsRequestHtml(appointment, records)}${parkingNoticeHtml(appointment)}`
       })
     });
       customerSent = true;
@@ -1676,7 +1719,7 @@ async function sendAppointmentEmails(appointment, appointmentRef) {
         html: bookingEmailHtml({
           title: Number(appointment.paidAmount || 0) > 0 ? "New paid appointment" : "New appointment",
           preview: `<strong>${customerName}</strong><br>${escapeHtml(appointment.email)} · ${escapeHtml(appointment.phone)}${addressLine}`,
-          content: `${appointmentDetails}${recordsRequirementHtml(appointment, records)}${appointmentChecklistHtml(appointment, records)}${parkingNoticeHtml()}`
+          content: `${appointmentDetails}${recordsRequirementHtml(appointment, records)}${appointmentChecklistHtml(appointment, records)}${parkingNoticeHtml(appointment)}`
         })
       });
       adminSent = true;
@@ -1760,18 +1803,19 @@ app.post("/api/create-booking-checkout", async (req, res) => {
     return res.status(400).json({ error: "Please complete every required booking field" });
   }
   const availability = await getClinicAvailabilityConfig();
-  if (!isBookableAppointment(date, time, availability)) {
+  const selectedClinic = clinicId(clinic);
+  if (!isBookableAppointment(date, time, availability, selectedClinic)) {
     return res.status(400).json({ error: "Please choose an available appointment slot" });
   }
   if (!['deposit', 'full'].includes(paymentChoice)) {
     return res.status(400).json({ error: "Choose whether to pay the £5 deposit or the full £49" });
   }
 
-  const appointmentId = `${date}_${time.replace(/[^0-9apm]/gi, "")}`;
+  const appointmentId = `${selectedClinic}_${date}_${time.replace(/[^0-9apm]/gi, "")}`;
   const appointmentRef = admin.firestore().collection("appointments").doc(appointmentId);
   const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 31 * 60 * 1000);
   const appointmentData = {
-    medicalType, clinic, date, time, firstName, lastName, email, phone,
+    medicalType, clinic: clinicDetails(clinic).name, clinicId: selectedClinic, date, time, firstName, lastName, email, phone,
     addressLine1: addressLine1 || null, addressLine2: addressLine2 || null, city: city || null, postcode: postcode || null,
     council: council || null,
     paymentChoice,
@@ -1945,7 +1989,8 @@ app.post("/api/book-appointment", async (req, res) => {
     }
 
     const availability = await getClinicAvailabilityConfig();
-    if (!isBookableAppointment(date, time, availability)) {
+    const selectedClinic = clinicId(clinic);
+    if (!isBookableAppointment(date, time, availability, selectedClinic)) {
       console.error("❌ Invalid appointment slot:", { date, time });
       return res.status(400).json({ error: "Please choose an available appointment slot" });
     }
@@ -1957,7 +2002,8 @@ app.post("/api/book-appointment", async (req, res) => {
     const confirmationToken = randomBytes(24).toString("hex");
     const appointmentData = {
       medicalType,
-      clinic,
+      clinic: clinicDetails(clinic).name,
+      clinicId: selectedClinic,
       date,
       time,
       firstName,
@@ -1978,7 +2024,7 @@ app.post("/api/book-appointment", async (req, res) => {
       status: "confirmed"
     };
     
-    const appointmentId = `${date}_${time.replace(/[^0-9apm]/gi, "")}`;
+    const appointmentId = `${selectedClinic}_${date}_${time.replace(/[^0-9apm]/gi, "")}`;
     const appointmentRef = db.collection("appointments").doc(appointmentId);
     try {
       await db.runTransaction(async transaction => {
