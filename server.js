@@ -1340,6 +1340,18 @@ function appointmentTimeSlots() {
   return slots;
 }
 
+function leicesterAppointmentTimeSlots() {
+  const slots = [];
+  for (let minute = 540; minute <= 1140; minute += 20) {
+    const hour = Math.floor(minute / 60);
+    const minutes = minute % 60;
+    const suffix = hour >= 12 ? "pm" : "am";
+    const displayHour = hour % 12 || 12;
+    slots.push(`${displayHour}:${String(minutes).padStart(2, "0")}${suffix}`);
+  }
+  return slots;
+}
+
 const CLINIC_AVAILABILITY_CONFIG = "clinicAvailability";
 const CLINIC_AVAILABILITY_DOC = "calendar";
 const CLINICS = {
@@ -1359,8 +1371,8 @@ function isDateKey(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 }
 
-function normaliseSingleAvailability(input = {}) {
-  const validSlots = new Set(appointmentTimeSlots());
+function normaliseSingleAvailability(input = {}, validSlots = appointmentTimeSlots()) {
+  const validSlotSet = new Set(validSlots);
   const closedDates = [...new Set((Array.isArray(input.closedDates) ? input.closedDates : [])
     .filter(isDateKey))].slice(0, 366);
   const overrides = {};
@@ -1369,7 +1381,7 @@ function normaliseSingleAvailability(input = {}) {
   Object.entries(sourceOverrides).slice(0, 366).forEach(([date, value]) => {
     if (!isDateKey(date) || !value || typeof value !== "object") return;
     const slots = [...new Set((Array.isArray(value.slots) ? value.slots : [])
-      .filter(slot => validSlots.has(slot)))];
+      .filter(slot => validSlotSet.has(slot)))];
     if (value.closed === true || slots.length) overrides[date] = { closed: value.closed === true, slots };
   });
 
@@ -1382,7 +1394,7 @@ function normaliseAvailabilityConfig(input = {}) {
   return {
     clinics: {
       greenwich: normaliseSingleAvailability(source.greenwich || input),
-      leicester: normaliseSingleAvailability(source.leicester || {})
+      leicester: normaliseSingleAvailability(source.leicester || {}, leicesterAppointmentTimeSlots())
     }
   };
 }
@@ -1394,12 +1406,9 @@ async function getClinicAvailabilityConfig() {
 
 function defaultSlotsForClinic(date, selectedClinic) {
   if (selectedClinic === "leicester") {
-    // Monday, 11:00am–7:00pm inclusive, in 30-minute appointment starts.
+    // Monday, 9:00am–7:00pm inclusive, in 20-minute appointment starts.
     if (dateFromKey(date).getUTCDay() !== 1) return [];
-    return appointmentTimeSlots().filter(slot => {
-      const minutes = timeSlotMinutes(slot);
-      return minutes >= 11 * 60 && minutes <= 19 * 60;
-    });
+    return leicesterAppointmentTimeSlots();
   }
   return appointmentTimeSlots();
 }
@@ -1581,7 +1590,7 @@ app.get("/api/available-slots/:date", async (req, res) => {
       if (data.status === "payment_pending") heldSlots.set(data.time, data.expiresAt.toMillis());
     });
     
-    const slots = appointmentTimeSlots().map(time => ({
+    const slots = defaultSlotsForClinic(date, selectedClinic).map(time => ({
       time,
       available: isBookableAppointment(date, time, availability, selectedClinic) && !bookedSlots.has(time),
       heldUntil: heldSlots.get(time) || null
