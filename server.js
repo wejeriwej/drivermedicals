@@ -1799,6 +1799,31 @@ async function syncAppointmentCalendarEvent(appointment, appointmentRef) {
   }
 }
 
+async function retryRecentFailedCalendarSyncs() {
+  if (!bookingCalendarAuth) return;
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  try {
+    const snapshot = await admin.firestore().collection("appointments").get();
+    const retryable = snapshot.docs
+      .filter(document => {
+        const appointment = document.data();
+        const createdAt = appointment.createdAt?.toMillis?.() || 0;
+        return appointment.status === "confirmed"
+          && Boolean(appointment.calendarSyncError)
+          && !appointment.googleCalendarEventId
+          && createdAt >= cutoff;
+      })
+      .slice(0, 25);
+
+    for (const document of retryable) {
+      await syncAppointmentCalendarEvent(document.data(), document.ref);
+    }
+    if (retryable.length) console.log(`Retried ${retryable.length} failed appointment calendar sync(s)`);
+  } catch (error) {
+    console.error("Unable to retry failed appointment calendar syncs:", error.message);
+  }
+}
+
 async function sendAppointmentEmails(appointment, appointmentRef) {
   const discount = Number(appointment.discountAmount || 0);
   const discountRow = discount > 0
@@ -2203,5 +2228,8 @@ app.get("/health", (req, res) => {
 
 
 const port = Number(process.env.PORT) || 3000;
-app.listen(port, () => console.log(`✅ Server running on http://localhost:${port}`));
+app.listen(port, () => {
+  console.log(`✅ Server running on http://localhost:${port}`);
+  setTimeout(() => retryRecentFailedCalendarSyncs(), 5000);
+});
 
