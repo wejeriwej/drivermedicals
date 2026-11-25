@@ -1799,28 +1799,28 @@ async function syncAppointmentCalendarEvent(appointment, appointmentRef) {
   }
 }
 
-async function retryRecentFailedCalendarSyncs() {
+async function backfillUpcomingCalendarEvents() {
   if (!bookingCalendarAuth) return;
-  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const today = londonNow().date;
   try {
     const snapshot = await admin.firestore().collection("appointments").get();
-    const retryable = snapshot.docs
+    const missing = snapshot.docs
       .filter(document => {
         const appointment = document.data();
-        const createdAt = appointment.createdAt?.toMillis?.() || 0;
         return appointment.status === "confirmed"
-          && Boolean(appointment.calendarSyncError)
           && !appointment.googleCalendarEventId
-          && createdAt >= cutoff;
-      })
-      .slice(0, 25);
+          && isDateKey(appointment.date)
+          && appointment.date >= today;
+      });
 
-    for (const document of retryable) {
-      await syncAppointmentCalendarEvent(document.data(), document.ref);
+    let synced = 0;
+    for (const document of missing) {
+      const successful = await syncAppointmentCalendarEvent(document.data(), document.ref);
+      if (successful) synced += 1;
     }
-    if (retryable.length) console.log(`Retried ${retryable.length} failed appointment calendar sync(s)`);
+    if (missing.length) console.log(`Backfilled ${synced} of ${missing.length} upcoming appointment calendar event(s)`);
   } catch (error) {
-    console.error("Unable to retry failed appointment calendar syncs:", error.message);
+    console.error("Unable to backfill upcoming appointment calendar events:", error.message);
   }
 }
 
@@ -2230,6 +2230,6 @@ app.get("/health", (req, res) => {
 const port = Number(process.env.PORT) || 3000;
 app.listen(port, () => {
   console.log(`✅ Server running on http://localhost:${port}`);
-  setTimeout(() => retryRecentFailedCalendarSyncs(), 5000);
+  setTimeout(() => backfillUpcomingCalendarEvents(), 5000);
 });
 

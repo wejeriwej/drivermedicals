@@ -49,6 +49,29 @@ test('unpaid holds expire without releasing confirmed bookings', () => {
   assert.equal(context.appointmentBlocksSlot({ status: 'confirmed' }), true);
 });
 
+test('calendar backfill includes every upcoming confirmed booking without an event', async () => {
+  const code = source.slice(source.indexOf('async function backfillUpcomingCalendarEvents('), source.indexOf('async function sendAppointmentEmails('));
+  const synced = [];
+  const documents = [
+    { id: 'today', data: () => ({ status: 'confirmed', date: '2026-11-25' }), ref: { id: 'today' } },
+    { id: 'future', data: () => ({ status: 'confirmed', date: '2026-12-01' }), ref: { id: 'future' } },
+    { id: 'past', data: () => ({ status: 'confirmed', date: '2026-11-24' }), ref: { id: 'past' } },
+    { id: 'pending', data: () => ({ status: 'payment_pending', date: '2026-12-02' }), ref: { id: 'pending' } },
+    { id: 'existing', data: () => ({ status: 'confirmed', date: '2026-12-03', googleCalendarEventId: 'event-1' }), ref: { id: 'existing' } }
+  ];
+  const context = vm.createContext({
+    bookingCalendarAuth: {},
+    londonNow: () => ({ date: '2026-11-25' }),
+    isDateKey: value => /^\d{4}-\d{2}-\d{2}$/.test(value),
+    admin: { firestore: () => ({ collection: () => ({ get: async () => ({ docs: documents }) }) }) },
+    syncAppointmentCalendarEvent: async (_appointment, ref) => { synced.push(ref.id); return true; },
+    console: { log() {}, error() {} }
+  });
+  vm.runInContext(code, context);
+  await context.backfillUpcomingCalendarEvents();
+  assert.deepEqual(synced, ['today', 'future']);
+});
+
 test('appointment slots run every 30 minutes from 9am through 10pm', () => {
   const code = source.slice(source.indexOf('function appointmentTimeSlots('), source.indexOf('function dateKey('));
   const context = vm.createContext({});
