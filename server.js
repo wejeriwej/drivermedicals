@@ -6,7 +6,8 @@ import "dotenv/config";
 import admin from "firebase-admin";
 import Stripe from "stripe";
 import nodemailer from "nodemailer";
-import { randomBytes } from "node:crypto";
+import { GoogleAuth } from "google-auth-library";
+import { createHash, randomBytes } from "node:crypto";
 
 import WebSocket from "ws";
 import expressWs from "express-ws";
@@ -1196,11 +1197,13 @@ const motorMedicalsStripe = process.env.MOTOR_MEDICALS_STRIPE_SECRET_KEY?.starts
   ? new Stripe(process.env.MOTOR_MEDICALS_STRIPE_SECRET_KEY)
   : null;
 
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+const firebaseServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
+  ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+  : null;
+
+if (firebaseServiceAccount) {
   admin.initializeApp({
-    credential: admin.credential.cert(
-      JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-    )
+    credential: admin.credential.cert(firebaseServiceAccount)
   });
 }
 
@@ -1690,6 +1693,112 @@ function bookingEmailHtml({ title, preview, content }) {
   return `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#17231e;"><div style="max-width:680px;margin:0 auto;padding:28px 16px;"><div style="padding:24px 28px;background:#0d5d48;border-radius:18px 18px 0 0;color:#ffffff;"><div style="font-size:13px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#bce9d7;">Pro Driver Medicals</div><h1 style="margin:8px 0 0;font-size:29px;line-height:1.18;color:#ffffff;">${escapeHtml(title)}</h1></div><div style="padding:28px;background:#ffffff;border-radius:0 0 18px 18px;box-shadow:0 8px 24px rgba(23,35,30,.08);"><p style="margin:0 0 22px;color:#53625b;font-size:16px;line-height:1.6;">${preview}</p>${content}<p style="margin:28px 0 0;padding-top:22px;border-top:1px solid #e2e9e5;color:#53625b;font-size:14px;line-height:1.6;">Need help? Call <a href="tel:+447501762582" style="color:#0d5d48;font-weight:700;text-decoration:none;">07501762582</a>.</p></div></div><style>.email-details{width:100%;border-collapse:collapse;margin:20px 0;background:#edf8f2;border-radius:12px;overflow:hidden}.email-details td{padding:10px 14px;border-bottom:1px solid #d9eee2;font-size:14px;line-height:1.45}.email-details tr:last-child td{border:0}.email-details td:first-child{width:38%;color:#486258;font-weight:700}.email-checklist{margin-top:26px}.email-checklist h3,.email-records h3,.email-travel h3{margin:0 0 14px;color:#17382c;font-size:19px}.email-checklist ul,.email-records ol{margin:0;padding:0;list-style:none}.email-checklist li{display:flex;gap:11px;margin:0 0 12px;padding:13px;background:#f7faf8;border-radius:10px;color:#4d5e56;font-size:14px;line-height:1.5}.email-number{display:inline-block;flex:0 0 25px;width:25px;height:25px;border-radius:50%;background:#0d5d48;color:#fff;font-size:12px;line-height:25px;text-align:center;font-weight:700}.email-records{margin-top:28px;padding:20px;background:#fff8e9;border-radius:12px}.email-records li{margin:0 0 9px;padding-left:22px;position:relative;color:#5d553c;font-size:14px;line-height:1.5}.email-records li:before{content:'✓';position:absolute;left:0;color:#a06609;font-weight:700}.email-travel{margin-top:24px;padding:20px;border:1px solid #d7e8df;border-radius:12px;background:#f6faf8;color:#4d5e56;font-size:14px;line-height:1.55}.email-travel p{margin:9px 0}.email-travel .email-address{padding:12px 14px;border-left:4px solid #0d5d48;background:#edf8f2;border-radius:7px;color:#294b3e}.email-arrival{margin-top:18px;padding:18px;background:#edf8f2;border:1px solid #d7e8df;border-radius:10px;text-align:center;color:#294b3e}.email-arrival p{margin:0!important;text-align:left}</style></body></html>`;
 }
 
+const bookingCalendarId = process.env.GOOGLE_CALENDAR_ID?.trim();
+const bookingCalendarCredentials = process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT
+  ? JSON.parse(process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT)
+  : firebaseServiceAccount;
+const bookingCalendarAuth = bookingCalendarId && bookingCalendarCredentials
+  ? new GoogleAuth({
+      credentials: bookingCalendarCredentials,
+      scopes: ["https://www.googleapis.com/auth/calendar.events"]
+    })
+  : null;
+
+function calendarDateTime(date, time, additionalMinutes = 0) {
+  const match = /^(\d{1,2}):(\d{2})(am|pm)$/i.exec(String(time || "").trim());
+  if (!isDateKey(date) || !match) throw new Error("Appointment has an invalid date or time");
+  let hour = Number(match[1]) % 12;
+  if (match[3].toLowerCase() === "pm") hour += 12;
+  const instant = new Date(`${date}T${String(hour).padStart(2, "0")}:${match[2]}:00Z`);
+  instant.setUTCMinutes(instant.getUTCMinutes() + additionalMinutes);
+  return instant.toISOString().slice(0, 19);
+}
+
+function calendarEventId(appointmentRef) {
+  // A deterministic Google event ID makes retries safe if the event was
+  // created but Firestore could not record the result on the first attempt.
+  return `pdm${createHash("sha256").update(appointmentRef.id).digest("hex").slice(0, 40)}`;
+}
+
+async function syncAppointmentCalendarEvent(appointment, appointmentRef) {
+  if (!bookingCalendarAuth) return false;
+  if (appointment.googleCalendarEventId) return true;
+
+  try {
+    const clinic = clinicDetails(appointment.clinic);
+    const durationMinutes = clinic.id === "leicester" ? 20 : 30;
+    const eventId = calendarEventId(appointmentRef);
+    const description = [
+      `Customer: ${appointment.firstName} ${appointment.lastName}`,
+      `Phone: ${appointment.phone}`,
+      `Email: ${appointment.email}`,
+      `Medical: ${appointment.medicalType}`,
+      appointment.council ? `Licensing authority: ${appointment.council}` : null,
+      `Payment: ${Number(appointment.paidAmount || 0) > 0 ? `£${(Number(appointment.paidAmount) / 100).toFixed(2)} paid` : "Pay at clinic"}`
+    ].filter(Boolean).join("\n");
+    const event = {
+      id: eventId,
+      summary: `Driver medical – ${appointment.firstName} ${appointment.lastName}`,
+      description,
+      location: clinic.address,
+      start: {
+        dateTime: calendarDateTime(appointment.date, appointment.time),
+        timeZone: "Europe/London"
+      },
+      end: {
+        dateTime: calendarDateTime(appointment.date, appointment.time, durationMinutes),
+        timeZone: "Europe/London"
+      },
+      visibility: "private",
+      transparency: "opaque",
+      reminders: {
+        useDefault: false,
+        overrides: [
+          { method: "popup", minutes: 24 * 60 },
+          { method: "popup", minutes: 60 }
+        ]
+      },
+      extendedProperties: {
+        private: { appointmentId: appointmentRef.id, source: "pro-driver-medicals" }
+      }
+    };
+
+    await bookingCalendarAuth.request({
+      url: `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(bookingCalendarId)}/events`,
+      method: "POST",
+      params: { sendUpdates: "none" },
+      data: event
+    });
+    await appointmentRef.update({
+      googleCalendarEventId: eventId,
+      googleCalendarSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+      calendarSyncError: admin.firestore.FieldValue.delete()
+    });
+    return true;
+  } catch (error) {
+    if (error?.response?.status === 409 || error?.code === 409) {
+      const eventId = calendarEventId(appointmentRef);
+      try {
+        await appointmentRef.update({
+          googleCalendarEventId: eventId,
+          googleCalendarSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+          calendarSyncError: admin.firestore.FieldValue.delete()
+        });
+        return true;
+      } catch (recordError) {
+        error = recordError;
+      }
+    }
+    const message = String(error?.message || "Google Calendar sync failed").slice(0, 500);
+    console.error("Appointment calendar sync failed:", message);
+    await appointmentRef.update({
+      calendarSyncError: message,
+      calendarSyncLastAttemptAt: admin.firestore.FieldValue.serverTimestamp()
+    }).catch(() => {});
+    return false;
+  }
+}
+
 async function sendAppointmentEmails(appointment, appointmentRef) {
   const discount = Number(appointment.discountAmount || 0);
   const discountRow = discount > 0
@@ -1788,10 +1897,13 @@ async function completePaidAppointment(session) {
     });
   });
 
-  if (confirmedAppointment?.status === "confirmed" && (!confirmedAppointment.customerConfirmationEmailSent || !confirmedAppointment.adminConfirmationEmailSent)) {
-    const sent = await sendAppointmentEmails(confirmedAppointment, appointmentRef);
-    if (sent) await appointmentRef.update({ confirmationEmailSent: true });
-    return sent;
+  if (confirmedAppointment?.status === "confirmed") {
+    await syncAppointmentCalendarEvent(confirmedAppointment, appointmentRef);
+    if (!confirmedAppointment.customerConfirmationEmailSent || !confirmedAppointment.adminConfirmationEmailSent) {
+      const sent = await sendAppointmentEmails(confirmedAppointment, appointmentRef);
+      if (sent) await appointmentRef.update({ confirmationEmailSent: true });
+      return sent;
+    }
   }
   return true;
 }
@@ -1909,6 +2021,7 @@ app.get("/api/booking-confirmation", async (req, res) => {
     if (!appointmentSnapshot.exists) return res.status(404).json({ error: "Confirmed booking not found" });
 
     const appointment = appointmentSnapshot.data();
+    await syncAppointmentCalendarEvent(appointment, appointmentRef);
     if (req.query.resend === "1") {
       await sendAppointmentEmails(appointment, appointmentRef);
     }
@@ -1944,8 +2057,10 @@ app.get("/api/direct-booking-confirmation", async (req, res) => {
       .limit(1)
       .get();
     if (snapshot.empty) return res.status(404).json({ error: "Confirmed booking not found" });
-    const appointment = snapshot.docs[0].data();
+    const appointmentDocument = snapshot.docs[0];
+    const appointment = appointmentDocument.data();
     if (appointment.status !== "confirmed") return res.status(404).json({ error: "Confirmed booking not found" });
+    await syncAppointmentCalendarEvent(appointment, appointmentDocument.ref);
 
     res.json({
       firstName: appointment.firstName,
@@ -2052,6 +2167,7 @@ app.post("/api/book-appointment", async (req, res) => {
       throw bookingError;
     }
     
+    await syncAppointmentCalendarEvent(appointmentData, appointmentRef);
     const confirmationEmailSent = await sendAppointmentEmails(appointmentData, appointmentRef);
     if (confirmationEmailSent) await appointmentRef.update({ confirmationEmailSent: true });
     

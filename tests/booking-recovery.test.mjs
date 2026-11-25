@@ -13,6 +13,7 @@ function emailHarness(failRecipient) {
     console: { error() {} }, bookingAdminEmails: ['admin@example.com'],
     sendBookingEmail: async ({ to }) => { calls.push(to); if (to === failRecipient || (Array.isArray(to) && failRecipient === 'admin')) throw new Error('Provider unavailable'); },
     escapeHtml: value => String(value || ''), displayAppointmentDate: () => '',
+    clinicDetails: () => ({ address: 'Test clinic' }),
     getRecordsGuidance: () => ({}), bookingEmailHtml: () => '', parkingNoticeHtml: () => '',
     recordsRequirementHtml: () => '', appointmentChecklistHtml: () => '', recordsRequestHtml: () => ''
   });
@@ -61,17 +62,17 @@ test('appointment slots run every 30 minutes from 9am through 10pm', () => {
 });
 
 test('bookable appointments are no longer restricted to Wednesdays', () => {
-  const code = source.slice(source.indexOf('function appointmentTimeSlots('), source.indexOf('// Get available dates for the calendar'));
+  const code = source.slice(source.indexOf('function appointmentTimeSlots('), source.indexOf('app.get("/api/admin/clinic-availability"'));
   const context = vm.createContext({ Date, Intl, APPOINTMENT_START_DATE: '2026-09-09' });
   vm.runInContext(code, context);
   const tomorrow = new Date();
   tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
   const date = `${tomorrow.getUTCFullYear()}-${String(tomorrow.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrow.getUTCDate()).padStart(2, '0')}`;
-  assert.equal(context.isBookableAppointment(date, '9:00am'), true);
+  assert.equal(context.isBookableAppointment(date, '9:00am', context.normaliseAvailabilityConfig({})), true);
 });
 
 test('same-day evening bookings close at 2pm London time', () => {
-  const code = source.slice(source.indexOf('function appointmentTimeSlots('), source.indexOf('// Get available dates for the calendar'));
+    const code = source.slice(source.indexOf('function appointmentTimeSlots('), source.indexOf('app.get("/api/admin/clinic-availability"'));
   const bookingAt = instant => {
     class ClockDate extends Date {
       constructor(...args) { super(...(args.length ? args : [instant])); }
@@ -79,7 +80,8 @@ test('same-day evening bookings close at 2pm London time', () => {
     }
     const context = vm.createContext({ Date: ClockDate, Intl, APPOINTMENT_START_DATE: '2026-09-09' });
     vm.runInContext(code, context);
-    return context.isBookableAppointment;
+    const availability = context.normaliseAvailabilityConfig({});
+    return (date, time) => context.isBookableAppointment(date, time, availability);
   };
   const beforeCutoff = bookingAt('2026-11-05T13:59:00Z');
   assert.equal(beforeCutoff('2026-11-05', '5:00pm'), false);
@@ -102,6 +104,7 @@ test('the instant calendar follows the same-day cutoff and evening slot rules', 
   const context = vm.createContext({
     Date,
     APPOINTMENT_START_DATE: '2026-09-09',
+    selectedClinicId: () => 'greenwich',
     londonNow: () => ({ date: '2026-11-05', minutes: 13 * 60 + 59 }),
     dateFromKey: value => new Date(`${value}T12:00:00Z`),
     dateKey: value => value.toISOString().slice(0, 10),
@@ -118,4 +121,13 @@ test('the instant calendar follows the same-day cutoff and evening slot rules', 
   context.londonNow = () => ({ date: '2026-11-05', minutes: 14 * 60 });
   assert.equal(context.fallbackDates()[0].date, '2026-11-06');
   assert.equal(context.fallbackSlots('2026-11-05').find(slot => slot.time === '5:30pm').available, false);
+});
+
+test('calendar times preserve London wall time and appointment duration', () => {
+  const code = source.slice(source.indexOf('function calendarDateTime('), source.indexOf('function calendarEventId('));
+  const context = vm.createContext({ Date, isDateKey: value => /^\d{4}-\d{2}-\d{2}$/.test(value) });
+  vm.runInContext(code, context);
+  assert.equal(context.calendarDateTime('2026-12-01', '9:00am'), '2026-12-01T09:00:00');
+  assert.equal(context.calendarDateTime('2026-07-01', '5:30pm', 30), '2026-07-01T18:00:00');
+  assert.equal(context.calendarDateTime('2026-12-01', '10:00pm', 30), '2026-12-01T22:30:00');
 });
